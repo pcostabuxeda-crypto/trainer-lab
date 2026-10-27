@@ -197,3 +197,53 @@ i la congelació es proven amb `cargo test` en mil·lisegons.
 El test [`tests/test_game.rs`](../src-tauri/tests/test_game.rs) fa el recorregut complet
 amb el joc de prova real: el compila, l'obre, troba la vida per AOB, l'escriu, la congela,
 comprova que el joc veu els canvis i detecta quan es tanca.
+
+---
+
+## 8. Motor de trucs ([`trainers/engine.rs`](../src-tauri/src/trainers/engine.rs))
+
+En adjuntar-se a un joc amb definició:
+
+1. **Versió:** es calcula l'SHA-256 de l'executable (amb memòria cau per ruta + mida + data)
+   i es compara amb `versions`: verificada, no verificada o sense informació.
+2. **Punts de partida:** per a cada truc es resol el punt de partida (`offset` o `aob`) i es
+   guarda. L'AOB és la part cara; el resultat no canvia mentre el joc és obert.
+3. **A cada ús** es torna a recórrer la cadena de punters, perquè l'objecte pot haver canviat
+   d'adreça (nova partida, nou nivell).
+
+| `kind` | Acció | Què fa |
+|---|---|---|
+| `toggle` + `freeze` | activar | Desa el valor original, escriu i congela |
+| `toggle` + `write` | activar | Desa l'original i escriu un cop |
+| `toggle` + `patch` | activar | Llegeix els bytes: si no són `expect`, **no escriu res**. Si ho són, desa'ls i escriu el patch |
+| `toggle` | desactivar | Deixa de congelar i, amb `off: "restore"` (per defecte), restaura l'original |
+| `slider` | posar valor | Comprova `min`/`max`, escriu i, amb `freeze: true`, congela |
+| `value` | posar valor | Comprova el rang i escriu un cop |
+| `button` | prémer | `add`: llegeix, suma i escriu; `set`: escriu |
+
+En **desadjuntar**, tots els toggles actius es desactiven (restaurant valors i codi). Si el
+joc s'ha tancat, no es fa res, perquè no hi ha memòria a restaurar.
+
+La **congelació segueix la cadena de punters**: a cada cicle el `Freezer` recorre de nou els
+offsets des del punt de partida. Si un punter és nul (p. ex. al menú principal), es salta
+aquell cicle sense comptar-lo com a error.
+
+## 9. Definicions i validació ([`trainers/model.rs`](../src-tauri/src/trainers/model.rs))
+
+- `serde` llegeix el JSON amb `deny_unknown_fields`: un camp mal escrit (`"ofset"`) és un error.
+- `validate` comprova la coherència entre camps (un `patch` necessita `bytes` i `expect` de la
+  mateixa mida, un slider necessita `min < max`…). Retorna **tots** els errors amb la ruta del
+  camp.
+- `schemars` genera [schemas/trainer.schema.json](../schemas/trainer.schema.json) a partir dels
+  mateixos structs, i `ts-rs` els tipus de TypeScript. Una sola font de veritat.
+- Es vigilen les carpetes amb `notify`: en desar un `.json`, el catàleg es recarrega (300 ms
+  d'espera per agrupar escriptures) i s'emet `trainers-changed`.
+
+## 10. Dreceres globals ([`hotkeys.rs`](../src-tauri/src/hotkeys.rs))
+
+- Fan servir `tauri-plugin-global-shortcut` (`RegisterHotKey` de Windows), que funciona encara
+  que el joc tingui el focus.
+- **Només es registren mentre hi ha un joc adjuntat** i es desregistren en desadjuntar.
+- Drecera efectiva = la de l'usuari (`settings.json`) o, si no n'hi ha, la de la definició. Una
+  drecera buida la desactiva.
+- Si un altre programa ja fa servir la combinació, el registre falla i la UI ho mostra al truc.

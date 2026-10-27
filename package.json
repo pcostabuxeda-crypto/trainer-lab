@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "types": "cargo test -p trainer-lab --lib export_bindings",
+    "types": "cargo test -p trainer-lab --lib export_",
     "tauri": "tauri",
     "test-game": "cargo run -p test-game"
   },

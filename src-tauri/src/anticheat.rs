@@ -62,6 +62,27 @@ pub fn check(module_names: &[String], process_names: &[String]) -> AntiCheatRepo
     AntiCheatReport { in_game: matches(module_names, MODULES, false), system: matches(process_names, PROCESSES, true) }
 }
 
+/// Fitxers i carpetes d'anti-cheat a la carpeta d'instal·lació del joc. No vol dir que
+/// el joc el faci servir en mode offline: només avisa (cal confirmar).
+pub fn check_install_dir(entry_names: &[String]) -> Vec<String> {
+    const MARKERS: &[(&str, &str)] = &[
+        ("easyanticheat", "Easy Anti-Cheat"),
+        ("start_protected_game", "Easy Anti-Cheat"),
+        ("battleye", "BattlEye"),
+        ("beclient", "BattlEye"),
+    ];
+    let mut found: Vec<String> = entry_names
+        .iter()
+        .filter_map(|n| {
+            let n = n.to_lowercase();
+            MARKERS.iter().find(|(k, _)| n.contains(k)).map(|(_, l)| format!("{l} (a la carpeta del joc)"))
+        })
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,6 +99,15 @@ mod tests {
         );
         assert_eq!(r.in_game, s(&["BattlEye", "Easy Anti-Cheat"]));
         assert_eq!(r.system, s(&["BattlEye", "Riot Vanguard"]));
+    }
+
+    #[test]
+    fn install_dir_markers() {
+        assert_eq!(
+            check_install_dir(&s(&["Game.exe", "EasyAntiCheat", "start_protected_game.exe", "data"])),
+            s(&["Easy Anti-Cheat (a la carpeta del joc)"])
+        );
+        assert!(check_install_dir(&s(&["Game.exe", "Battle.dll"])).is_empty());
     }
 
     #[test]

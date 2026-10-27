@@ -1,0 +1,80 @@
+{
+  "$schema": "../schemas/trainer.schema.json",
+  "schemaVersion": 1,
+  "id": "test-game",
+  "name": "Trainer Lab · joc de prova",
+  "online": false,
+  "process": { "executable": "test-game.exe", "arch": "x64" },
+  "versions": [],
+  "cheats": [
+    {
+      "id": "vida-infinita",
+      "name": "Vida infinita",
+      "description": "Congela la vida a 100. En desactivar-lo, torna el valor que tenies.",
+      "category": "Jugador",
+      "kind": "toggle",
+      "target": {
+        "address": { "aob": { "pattern": "54 4C 41 42 41 4E 43 48", "offset": 8 }, "pointers": ["0x0"] },
+        "type": "i32"
+      },
+      "on": { "freeze": 100 },
+      "off": "restore",
+      "hotkey": "F1"
+    },
+    {
+      "id": "municio-infinita",
+      "name": "Munició infinita",
+      "category": "Armes",
+      "kind": "toggle",
+      "target": {
+        "address": { "aob": { "pattern": "54 4C 41 42 41 4E 43 48", "offset": 8 }, "pointers": ["0x4"] },
+        "type": "i32"
+      },
+      "on": { "freeze": 99 },
+      "hotkey": "F2"
+    },
+    {
+      "id": "afegir-municio",
+      "name": "+50 de munició",
+      "category": "Armes",
+      "kind": "button",
+      "target": {
+        "address": { "aob": { "pattern": "54 4C 41 42 41 4E 43 48", "offset": 8 }, "pointers": ["0x4"] },
+        "type": "i32"
+      },
+      "action": { "add": 50 },
+      "hotkey": "F3"
+    },
+    {
+      "id": "diners",
+      "name": "Diners",
+      "description": "Escriu la quantitat que vulguis i prem «Aplica».",
+      "category": "Economia",
+      "kind": "value",
+      "target": {
+        "address": { "aob": { "pattern": "54 4C 41 42 41 4E 43 48", "offset": 8 }, "pointers": ["0x8"] },
+        "type": "i64"
+      },
+      "default": 99999,
+      "min": 0,
+      "max": 999999999
+    },
+    {
+      "id": "velocitat",
+      "name": "Velocitat",
+      "description": "Multiplicador de la distància que recorres amb «r».",
+      "category": "Jugador",
+      "kind": "slider",
+      "target": {
+        "address": { "aob": { "pattern": "54 4C 41 42 41 4E 43 48", "offset": 8 }, "pointers": ["0x10"] },
+        "type": "f32"
+      },
+      "min": 0.5,
+      "max": 5,
+      "step": 0.5,
+      "default": 1,
+      "freeze": true,
+      "hotkeys": { "increase": "F6", "decrease": "F5" }
+    }
+  ]
+}

@@ -47,6 +47,10 @@ impl Pattern {
         self.0.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Posicions de totes les coincidències dins `hay`.
     pub fn find_all(&self, hay: &[u8]) -> Vec<usize> {
         if hay.len() < self.len() {

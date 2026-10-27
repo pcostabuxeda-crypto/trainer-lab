@@ -1,12 +1,13 @@
 //! Tipus de dada d'un valor en memòria i conversió a/des de bytes (little-endian,
 //! que és l'ordre dels bytes a x86/x64).
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::error::{AppError, AppResult};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum ValueType {
@@ -22,6 +23,8 @@ pub enum ValueType {
     F64,
     /// 1 byte: 0 = fals, qualsevol altre valor = cert
     Bool,
+    /// Seqüència de bytes en cru (només per a patches de codi)
+    Bytes,
 }
 
 impl ValueType {
@@ -32,13 +35,21 @@ impl ValueType {
             I16 | U16 => 2,
             I32 | U32 | F32 => 4,
             I64 | U64 | F64 => 8,
+            Bytes => 0,
         }
+    }
+
+    pub fn is_numeric(self) -> bool {
+        !matches!(self, ValueType::Bool | ValueType::Bytes)
     }
 
     // shortcut: els valors viatgen com f64; els enters de més de 2^53 perden precisió.
     // Si mai cal, canviar a un enum de valor tipat.
     pub fn encode(self, v: f64) -> AppResult<Vec<u8>> {
         use ValueType::*;
+        if self == Bytes {
+            return Err(AppError::InvalidValue("el tipus bytes no té valor numèric".into()));
+        }
         if !v.is_finite() {
             return Err(AppError::InvalidValue(format!("{v} no és un número finit")));
         }
@@ -68,12 +79,13 @@ impl ValueType {
             }
             F64 => v.to_le_bytes().to_vec(),
             Bool => vec![u8::from(v != 0.0)],
+            Bytes => unreachable!(),
         })
     }
 
     pub fn decode(self, b: &[u8]) -> AppResult<f64> {
         use ValueType::*;
-        if b.len() != self.size() {
+        if self == Bytes || b.len() != self.size() {
             return Err(AppError::InvalidValue(format!("{self:?} necessita {} bytes, n'hi ha {}", self.size(), b.len())));
         }
         // La mida ja està comprovada: els `try_into` no poden fallar
@@ -89,8 +101,26 @@ impl ValueType {
             F32 => f32::from_le_bytes(b.try_into().unwrap()) as f64,
             F64 => f64::from_le_bytes(b.try_into().unwrap()),
             Bool => f64::from(u8::from(b[0] != 0)),
+            Bytes => unreachable!(),
         })
     }
+}
+
+/// Bytes hex separats per espais, sense comodins: `"90 90 90"`.
+pub fn parse_hex_bytes(s: &str) -> AppResult<Vec<u8>> {
+    let bytes = s
+        .split_whitespace()
+        .map(|t| {
+            (t.len() == 2)
+                .then(|| u8::from_str_radix(t, 16).ok())
+                .flatten()
+                .ok_or_else(|| AppError::InvalidValue(format!("«{t}» no és un byte hex")))
+        })
+        .collect::<AppResult<Vec<u8>>>()?;
+    if bytes.is_empty() {
+        return Err(AppError::InvalidValue("cal com a mínim un byte".into()));
+    }
+    Ok(bytes)
 }
 
 #[cfg(test)]
@@ -115,5 +145,14 @@ mod tests {
         assert!(F32.encode(f64::NAN).is_err());
         assert!(F32.encode(1e300).is_err());
         assert!(I32.decode(&[1, 2]).is_err());
+        assert!(Bytes.encode(1.0).is_err());
+    }
+
+    #[test]
+    fn hex_bytes() {
+        assert_eq!(super::parse_hex_bytes("90 90 ff").unwrap(), vec![0x90, 0x90, 0xFF]);
+        for bad in ["", "9", "90 ??", "zz"] {
+            assert!(super::parse_hex_bytes(bad).is_err(), "{bad}");
+        }
     }
 }

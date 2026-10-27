@@ -82,3 +82,38 @@
 - Els valors viatgen com a `f64`: els enters de més de 2^53 perden precisió (comentat al codi).
 - `Locator.pointers` és opcional al JSON (per defecte, cap punter).
 - El crate només compila a Windows (`compile_error!` explícit).
+
+## Fase 3 — Definicions, UI del trainer i dreceres (27/10/2026)
+
+**Fet**
+- `trainers/model.rs`: format de definicions amb `serde` (`deny_unknown_fields`), validació de
+  coherència amb la ruta de cada error i JSON Schema generat (`schemas/trainer.schema.json`).
+- `trainers/mod.rs`: catàleg de definicions (exemples + carpeta d'usuari, que té prioritat),
+  errors per fitxer, hot-reload amb `notify` i SHA-256 de l'executable amb memòria cau.
+- `trainers/engine.rs`: toggle (freeze/write/patch amb `expect`), slider (rang, step,
+  congelació), value i button (add/set). Desa els originals i els restaura en desactivar o
+  desadjuntar.
+- La congelació ara recorre la cadena de punters a cada cicle (`Freezer::set_chain`): segueix
+  l'objecte si el joc el mou.
+- `hotkeys.rs`: dreceres globals registrades només amb un joc adjuntat; dreceres
+  personalitzades a `settings.json`; esdeveniment `hotkey-fired`.
+- `settings.rs`: interval de congelació i dreceres. Escriptura atòmica i còpia `.bak` si el
+  fitxer és invàlid.
+- Sessió: la definició `online: true` bloqueja; l'arquitectura ha de coincidir; avís (amb
+  confirmació) si hi ha fitxers d'anti-cheat a la carpeta del joc.
+- UI: llista de trainers i errors a la Biblioteca, processos marcats «té trainer», pantalla del
+  trainer amb trucs per categoria, valors en directe (cada 500 ms), editor de dreceres,
+  etiqueta de versió i configuració amb l'interval de congelació.
+- `trainers/test-game.json`: exemple amb un truc de cada tipus.
+
+**Verificat**
+- `cargo test --workspace`: 78 tests unitaris + 2 d'integració amb el joc real. El nou aplica
+  `test-game.json` sencer: vida congelada, +50 de munició, diners, velocitat i restauració.
+- `cargo clippy` sense avisos. `npm run typecheck` i `vite build` OK.
+- Hot-reload comprovat amb l'app en marxa: desar el JSON en torna a carregar el catàleg.
+- Pantalla del trainer revisada al navegador amb el backend simulat.
+
+**No verificat**
+- Les dreceres globals amb un joc real a primer pla: l'eina de control de pantalla no
+  reconeix l'exe de `tauri dev`. El registre i el handler compilen i tenen test de la lògica
+  de prioritats.

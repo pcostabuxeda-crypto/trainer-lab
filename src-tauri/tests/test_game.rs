@@ -11,6 +11,8 @@ use trainer_lab_lib::memory::freeze::Freezer;
 use trainer_lab_lib::memory::locator::{self, Locator};
 use trainer_lab_lib::memory::process::{Arch, Process};
 use trainer_lab_lib::memory::{Memory, WriteMode};
+use trainer_lab_lib::trainers::engine::{ActiveTrainer, CheatInput, VersionInfo};
+use trainer_lab_lib::trainers::model::{TrainerDef, validate};
 
 struct Game(Child);
 
@@ -94,4 +96,38 @@ fn reads_writes_and_freezes_the_test_game() {
     writeln!(game.0.stdin.as_mut().unwrap(), "q").unwrap();
     assert!(process.wait_exit(5000), "detecta que el joc s'ha tancat");
     assert!(process.read_bytes(health, &mut b).is_err());
+}
+
+#[test]
+fn example_definition_works_on_the_test_game() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../trainers/test-game.json");
+    let def: TrainerDef = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    validate(&def).unwrap();
+
+    let (mut game, mut out) = start_game();
+    let p = Arc::new(Process::open(game.0.id()).unwrap());
+    let modules = p.modules().unwrap();
+    let version = VersionInfo::check(&def, String::new());
+    let mut t = ActiveTrainer::new(def, version, p.as_ref(), &modules);
+    let freezer = Freezer::start(p.clone(), 10);
+    let mut apply = |id: &str, input| t.apply(id, input, p.as_ref(), &modules, &freezer).unwrap();
+
+    apply("vida-infinita", CheatInput::Toggle { on: true });
+    apply("afegir-municio", CheatInput::Press);
+    apply("diners", CheatInput::Set { value: 4242.0 });
+    apply("velocitat", CheatInput::Set { value: 3.0 });
+    std::thread::sleep(Duration::from_millis(30));
+    status_line(&mut game, &mut out, "d"); // rep mal, però la vida està congelada
+    std::thread::sleep(Duration::from_millis(30));
+    let line = status_line(&mut game, &mut out, "r");
+    assert!(line.contains("vida  100"), "{line}");
+    assert!(line.contains("munició  80"), "30 + 50: {line}");
+    assert!(line.contains("diners   4242"), "{line}");
+    assert!(line.contains("velocitat 3.0") && line.contains("distància 30"), "{line}");
+
+    // Desactivar la vida restaura el valor que hi havia en activar-la (100)
+    apply("vida-infinita", CheatInput::Toggle { on: false });
+    let line = status_line(&mut game, &mut out, "d");
+    assert!(line.contains("vida   85"), "{line}");
+    writeln!(game.0.stdin.as_mut().unwrap(), "q").unwrap();
 }

@@ -5,13 +5,18 @@ use serde::Serialize;
 use tauri::{AppHandle, State};
 use ts_rs::TS;
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
+use crate::hotkeys;
 use crate::logging::{self, LogEntry, LogLevel};
 use crate::memory::locator::{self, Locator};
 use crate::memory::process::{self, ProcessInfo};
 use crate::memory::value::ValueType;
 use crate::memory::{Memory, WriteMode};
 use crate::session::{Session, SessionInfo, SessionState};
+use crate::settings::{Settings, SettingsStore};
+use crate::trainers::engine::{CheatInput, CheatState, VersionInfo};
+use crate::trainers::model::{CheatDef, CheatKind, valid_hotkey};
+use crate::trainers::{CatalogView, TrainerStore};
 
 #[tauri::command]
 pub async fn list_processes() -> AppResult<Vec<ProcessInfo>> {
@@ -25,6 +30,8 @@ pub fn get_logs(limit: Option<usize>, min_level: Option<LogLevel>) -> Vec<LogEnt
     logging::recent(limit.unwrap_or(500).min(2000), min_level.unwrap_or(LogLevel::Trace))
 }
 
+// --- Sessió ---
+
 #[tauri::command]
 pub async fn attach(
     app: AppHandle,
@@ -37,7 +44,7 @@ pub async fn attach(
 
 #[tauri::command]
 pub fn detach(app: AppHandle, state: State<'_, SessionState>) -> bool {
-    state.detach(&app, "Desadjuntat per l'usuari", None)
+    state.detach(&app, "Desadjuntat per l'usuari", None, true)
 }
 
 #[tauri::command]
@@ -45,7 +52,147 @@ pub fn session_info(state: State<'_, SessionState>) -> Option<SessionInfo> {
     state.info()
 }
 
-// --- Comandes de depuració (Fase 2). A la Fase 3 la UI passarà per `set_cheat`. ---
+// --- Trainers ---
+
+#[tauri::command]
+pub fn list_trainers(store: State<'_, TrainerStore>) -> CatalogView {
+    store.view()
+}
+
+#[tauri::command]
+pub fn reload_trainers(store: State<'_, TrainerStore>) -> CatalogView {
+    store.reload();
+    store.view()
+}
+
+#[derive(Debug, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CheatView {
+    pub def: CheatDef,
+    pub state: CheatState,
+    /// Dreceres efectives (la de l'usuari o la de la definició)
+    pub hotkey: Option<String>,
+    pub hotkey_increase: Option<String>,
+    pub hotkey_decrease: Option<String>,
+    pub hotkey_error: Option<String>,
+}
+
+#[derive(Debug, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TrainerView {
+    pub id: String,
+    pub name: String,
+    pub version: VersionInfo,
+    pub cheats: Vec<CheatView>,
+}
+
+#[tauri::command]
+pub async fn trainer_view(state: State<'_, SessionState>, settings: State<'_, SettingsStore>) -> AppResult<Option<TrainerView>> {
+    let overrides = settings.get().hotkey_overrides;
+    let result = state.with_trainer(|s, t| {
+        let states = t.refresh(s.process.as_ref(), &s.modules);
+        let errors = s.hotkey_errors.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let o = overrides.get(&t.def.id);
+        let cheats = t
+            .def
+            .cheats
+            .iter()
+            .zip(states)
+            .map(|(c, state)| {
+                let hk = c.hotkeys.clone().unwrap_or_default();
+                let err_for = |k: &str| errors.iter().find(|(key, _)| key == k).map(|(_, e)| e.clone());
+                CheatView {
+                    hotkey: hotkeys::effective(o, &c.id, c.hotkey.as_ref()),
+                    hotkey_increase: hotkeys::effective(o, &format!("{}:increase", c.id), hk.increase.as_ref()),
+                    hotkey_decrease: hotkeys::effective(o, &format!("{}:decrease", c.id), hk.decrease.as_ref()),
+                    hotkey_error: err_for(&c.id)
+                        .or_else(|| err_for(&format!("{}:increase", c.id)))
+                        .or_else(|| err_for(&format!("{}:decrease", c.id))),
+                    def: c.clone(),
+                    state,
+                }
+            })
+            .collect();
+        Ok(TrainerView { id: t.def.id.clone(), name: t.def.name.clone(), version: t.version.clone(), cheats })
+    });
+    match result {
+        Ok(v) => Ok(Some(v)),
+        Err(AppError::NotAttached | AppError::InvalidValue(_)) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn cheat_states(state: State<'_, SessionState>) -> AppResult<Vec<CheatState>> {
+    state.with_trainer(|s, t| Ok(t.refresh(s.process.as_ref(), &s.modules)))
+}
+
+#[tauri::command]
+pub async fn set_cheat(state: State<'_, SessionState>, cheat_id: String, input: CheatInput) -> AppResult<CheatState> {
+    state.with_trainer(|s, t| t.apply(&cheat_id, input, s.process.as_ref(), &s.modules, &s.freezer))
+}
+
+/// Canvia la drecera d'un truc del joc adjuntat. `key` = id del truc, o `id:increase` /
+/// `id:decrease` als sliders. `accelerator` buit desactiva la drecera; `null` torna a la
+/// de la definició.
+#[tauri::command]
+pub fn set_hotkey(
+    app: AppHandle,
+    state: State<'_, SessionState>,
+    settings: State<'_, SettingsStore>,
+    key: String,
+    accelerator: Option<String>,
+) -> AppResult<()> {
+    let def = state.with_trainer(|_, t| Ok(t.def.clone()))?;
+    let cheat_id = key.split(':').next().unwrap_or_default();
+    let cheat = def.cheats.iter().find(|c| c.id == cheat_id).ok_or_else(|| AppError::InvalidValue(format!("no hi ha cap truc «{cheat_id}»")))?;
+    let suffix_ok = match key.split_once(':') {
+        None => matches!(cheat.kind, CheatKind::Toggle | CheatKind::Button),
+        Some((_, s)) => cheat.kind == CheatKind::Slider && matches!(s, "increase" | "decrease"),
+    };
+    if !suffix_ok {
+        return Err(AppError::InvalidValue(format!("«{key}» no admet drecera")));
+    }
+    if let Some(a) = &accelerator
+        && !a.is_empty()
+        && !valid_hotkey(a)
+    {
+        return Err(AppError::InvalidValue(format!("drecera «{a}» no vàlida")));
+    }
+
+    let mut s = settings.get();
+    let entry = s.hotkey_overrides.entry(def.id.clone()).or_default();
+    match accelerator {
+        Some(a) => entry.insert(key.clone(), a),
+        None => entry.remove(&key),
+    };
+    settings.save(s)?;
+    state.set_hotkey_errors(hotkeys::register(&app, &def));
+    tracing::info!(trainer = %def.id, key, "drecera actualitzada");
+    Ok(())
+}
+
+// --- Configuració ---
+
+#[tauri::command]
+pub fn get_settings(settings: State<'_, SettingsStore>) -> Settings {
+    settings.get()
+}
+
+#[tauri::command]
+pub fn save_settings(state: State<'_, SessionState>, settings: State<'_, SettingsStore>, value: Settings) -> AppResult<()> {
+    let interval = value.freeze_interval_ms;
+    settings.save(value)?;
+    let _ = state.with(|s| {
+        s.freezer.set_interval(interval);
+        Ok(())
+    });
+    Ok(())
+}
+
+// --- Depuració (Fase 2): llegir/escriure qualsevol localitzador ---
 
 #[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -87,7 +234,6 @@ pub async fn debug_write(
             s.freezer.set(&format!("{address:#x}:{value_type:?}"), address, bytes);
         }
         tracing::info!(address = format_args!("{address:#x}"), value, freeze, "valor escrit");
-        // Tornem a llegir per confirmar el que ha quedat a la memòria
         let (_, value) = resolve_and_read(s, &locator, value_type)?;
         Ok(MemoryReading { address: format!("{address:#x}"), value })
     })
