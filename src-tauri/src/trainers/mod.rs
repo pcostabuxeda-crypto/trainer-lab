@@ -4,6 +4,7 @@
 //! (`%APPDATA%\cat.trainerlab.app\trainers`). Si dos fitxers tenen el mateix `id`, guanya
 //! el de l'usuari. Un fitxer invàlid no tomba res: surt a la llista d'errors.
 
+pub mod editor;
 pub mod engine;
 pub mod model;
 

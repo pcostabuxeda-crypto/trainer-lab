@@ -18,6 +18,7 @@ use crate::hotkeys;
 use crate::memory::ModuleInfo;
 use crate::memory::freeze::Freezer;
 use crate::memory::process::{self, Arch, Process};
+use crate::memory::scanner::ScanState;
 use crate::settings::SettingsStore;
 use crate::trainers::engine::{ActiveTrainer, VersionInfo};
 use crate::trainers::{TrainerStore, exe_sha256};
@@ -64,6 +65,8 @@ pub struct Session {
     pub trainer: Mutex<Option<ActiveTrainer>>,
     /// Dreceres que no s'han pogut registrar: (clau, motiu)
     pub hotkey_errors: Mutex<Vec<(String, String)>>,
+    /// Resultats de l'escàner de memòria
+    pub scan: Mutex<Option<ScanState>>,
     stop_watch: Arc<AtomicBool>,
 }
 
@@ -168,6 +171,7 @@ impl SessionState {
             modules,
             trainer: Mutex::new(trainer),
             hotkey_errors: Mutex::new(Vec::new()),
+            scan: Mutex::new(None),
             stop_watch,
         };
         *self.lock() = Some(session);
@@ -216,6 +220,30 @@ impl SessionState {
             let t = t.as_mut().ok_or_else(|| AppError::InvalidValue("aquest joc no té cap definició de trainer".into()))?;
             f(s, t)
         })
+    }
+
+    /// Torna a carregar la definició del joc adjuntat (p. ex. després d'afegir-hi un truc).
+    /// Els trucs actius es desactiven abans, restaurant la memòria.
+    pub fn reload_trainer(&self, app: &AppHandle) -> AppResult<()> {
+        let def = self.with(|s| {
+            let def = app
+                .state::<TrainerStore>()
+                .catalog
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .for_executable(&s.process.name)
+                .map(|t| t.def.clone())
+                .ok_or_else(|| AppError::InvalidValue("aquest joc no té cap definició".into()))?;
+            let mut t = s.trainer.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(old) = t.as_mut() {
+                old.deactivate_all(s.process.as_ref(), &s.freezer);
+            }
+            let sha = exe_sha256(std::path::Path::new(&s.process.path)).unwrap_or_default();
+            *t = Some(ActiveTrainer::new(def.clone(), VersionInfo::check(&def, sha), s.process.as_ref(), &s.modules));
+            Ok(def)
+        })?;
+        self.set_hotkey_errors(hotkeys::register(app, &def));
+        Ok(())
     }
 
     pub fn set_hotkey_errors(&self, errors: Vec<(String, String)>) {

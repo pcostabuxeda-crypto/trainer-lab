@@ -270,3 +270,39 @@ parser mínim propi ([`vdf.rs`](../src-tauri/src/games/vdf.rs)), sense dependèn
 definició (pel nom de l'exe) o si s'executa des de la carpeta d'un joc instal·lat. Els
 ajudants (crash handlers, desinstal·ladors…) s'ignoren. Si la llista canvia, s'emet
 `running-games`.
+
+## 12. Escàner de memòria ([`memory/scanner.rs`](../src-tauri/src/memory/scanner.rs))
+
+**Primera cerca.** Recorre totes les regions **escrivibles** del joc (les dades; el codi i les
+constants no canvien) en blocs de 4 MB i compara cada posició **alineada** a la mida del tipus
+(4 bytes per a `i32`/`f32`). Els compiladors alineen les variables, així que n'hi ha prou i és
+molt més ràpid. Es guarden com a molt 2 milions de resultats (adreça + valor, 16 bytes cadascun).
+
+**Cerques següents.** Només es rellegeixen les adreces que queden. Les que són a prop
+(menys de 64 KB) es llegeixen juntes en un sol `ReadProcessMemory`, que és el que costa. Si un
+bloc creua una zona no llegible, es llegeixen una per una.
+
+| Condició | Es queda si… |
+|---|---|
+| valor exacte | ara = valor (decimals: ±0,01) |
+| ha canviat / no ha canviat | ara ≠ / = cerca anterior |
+| ha augmentat / disminuït | ara > / < cerca anterior |
+
+**Estàtica o dinàmica.** Si l'adreça és dins d'un mòdul (`joc.exe+0x…`) és una variable
+global i sempre serà al mateix lloc. Si no, és al heap i canviarà en reiniciar.
+
+**Cerca de punters (un nivell).** Per a una adreça dinàmica `A`, busca dins les dades dels
+mòduls valors `P` tals que `A − 0x1000 ≤ P ≤ A`: punters a l'inici de l'objecte que conté el
+valor. Cada candidat dona el localitzador `{ module, offset: on és P, pointers: [A − P] }`.
+
+## 13. Editor de definicions ([`trainers/editor.rs`](../src-tauri/src/trainers/editor.rs))
+
+«Desa com a truc» afegeix el truc a la definició de l'executable adjuntat, **sempre a la
+carpeta de l'usuari**:
+
+- definició de l'usuari → s'hi afegeix;
+- només un exemple inclòs → se'n fa una còpia amb el mateix `id` (que té prioritat);
+- cap → se'n crea una de nova (`id` a partir del nom de l'exe, i l'SHA-256 actual com a versió).
+
+Es valida la definició sencera abans d'escriure-la (escriptura atòmica). Després es recarrega el
+catàleg i el trainer de la sessió, i es tornen a registrar les dreceres.

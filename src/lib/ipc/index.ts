@@ -12,6 +12,7 @@ import type { SessionEvent } from "./types/SessionEvent";
 import type { SessionInfo } from "./types/SessionInfo";
 import type { ValueType } from "./types/ValueType";
 import type { CatalogView } from "./types/CatalogView";
+import type { CheatDef } from "./types/CheatDef";
 import type { CheatInput } from "./types/CheatInput";
 import type { CheatState } from "./types/CheatState";
 import type { HotkeyFired } from "./types/HotkeyFired";
@@ -19,13 +20,21 @@ import type { Settings } from "./types/Settings";
 import type { TrainerView } from "./types/TrainerView";
 import type { GameEntry } from "./types/GameEntry";
 import type { RunningGame } from "./types/RunningGame";
+import type { PointerCandidate } from "./types/PointerCandidate";
+import type { ScanFilter } from "./types/ScanFilter";
+import type { ScanHit } from "./types/ScanHit";
+import type { ScanSummary } from "./types/ScanSummary";
 
 export type { Arch } from "./types/Arch";
-export type { CheatDef } from "./types/CheatDef";
 export type { CheatView } from "./types/CheatView";
 export type { VersionStatus } from "./types/VersionStatus";
 export type { Store } from "./types/Store";
 export type {
+  CheatDef,
+  PointerCandidate,
+  ScanFilter,
+  ScanHit,
+  ScanSummary,
   GameEntry,
   RunningGame,
   CatalogView,
@@ -81,6 +90,17 @@ export const onRunningGames = (cb: (g: RunningGame[]) => void): Promise<Unlisten
 /** Obre el selector de fitxers. `null` si l'usuari cancel·la. */
 export const addManualGame = () => invoke<GameEntry[] | null>("add_manual_game");
 export const removeManualGame = (path: string) => invoke<GameEntry[]>("remove_manual_game", { path });
+
+// --- Escàner i editor ---
+export const scanFirst = (valueType: ValueType, value: number) => invoke<ScanSummary>("scan_first", { valueType, value });
+export const scanNext = (filter: ScanFilter) => invoke<ScanSummary>("scan_next", { filter });
+export const scanResults = (offset: number, limit: number) => invoke<ScanHit[]>("scan_results", { offset, limit });
+export const scanReset = () => invoke<void>("scan_reset");
+export const scanWrite = (address: string, valueType: ValueType, value: number) =>
+  invoke<MemoryReading>("scan_write", { address, valueType, value });
+export const findPointers = (address: string) => invoke<PointerCandidate[]>("find_pointers", { address });
+/** Retorna la ruta del fitxer on s'ha desat la definició. */
+export const saveCheat = (cheat: CheatDef) => invoke<string>("save_cheat", { cheat });
 
 // --- Configuració ---
 export const getSettings = () => invoke<Settings>("get_settings");

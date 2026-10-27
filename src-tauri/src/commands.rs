@@ -9,7 +9,8 @@ use crate::error::{AppError, AppResult};
 use crate::games::{GameEntry, GameStore, RunningGame};
 use crate::hotkeys;
 use crate::logging::{self, LogEntry, LogLevel};
-use crate::memory::locator::{self, Locator};
+use crate::memory::locator::{self, Locator, Offset};
+use crate::memory::scanner::{self, PointerCandidate, ScanFilter, ScanHit, ScanSummary};
 use crate::memory::process::{self, ProcessInfo};
 use crate::memory::value::ValueType;
 use crate::memory::{Memory, WriteMode};
@@ -17,7 +18,7 @@ use crate::session::{Session, SessionInfo, SessionState};
 use crate::settings::{ManualGame, Settings, SettingsStore};
 use crate::trainers::engine::{CheatInput, CheatState, VersionInfo};
 use crate::trainers::model::{CheatDef, CheatKind, valid_hotkey};
-use crate::trainers::{CatalogView, TrainerStore};
+use crate::trainers::{CatalogView, TrainerStore, editor, exe_sha256};
 
 #[tauri::command]
 pub async fn list_processes() -> AppResult<Vec<ProcessInfo>> {
@@ -242,6 +243,106 @@ pub fn save_settings(state: State<'_, SessionState>, settings: State<'_, Setting
         Ok(())
     });
     Ok(())
+}
+
+// --- Escàner (Fase 5) ---
+
+fn summary(s: &scanner::ScanState, started: std::time::Instant) -> ScanSummary {
+    ScanSummary { count: s.count(), truncated: s.truncated, scans: s.scans, elapsed_ms: started.elapsed().as_millis() as u64 }
+}
+
+#[tauri::command]
+pub async fn scan_first(state: State<'_, SessionState>, value_type: ValueType, value: f64) -> AppResult<ScanSummary> {
+    if !value_type.is_numeric() {
+        return Err(AppError::InvalidValue("l'escàner només busca valors numèrics".into()));
+    }
+    value_type.encode(value)?; // valida el rang abans d'escanejar
+    state.with(|s| {
+        let started = std::time::Instant::now();
+        let scan = scanner::first_scan(s.process.as_ref(), value_type, value);
+        let sum = summary(&scan, started);
+        tracing::info!(count = sum.count, ms = sum.elapsed_ms, value, ty = ?value_type, "primera cerca");
+        *s.scan.lock().unwrap_or_else(|e| e.into_inner()) = Some(scan);
+        Ok(sum)
+    })
+}
+
+#[tauri::command]
+pub async fn scan_next(state: State<'_, SessionState>, filter: ScanFilter) -> AppResult<ScanSummary> {
+    state.with(|s| {
+        let mut guard = s.scan.lock().unwrap_or_else(|e| e.into_inner());
+        let scan = guard.as_mut().ok_or_else(|| AppError::InvalidValue("primer fes una primera cerca".into()))?;
+        let started = std::time::Instant::now();
+        scan.next_scan(s.process.as_ref(), filter);
+        let sum = summary(scan, started);
+        tracing::info!(count = sum.count, ms = sum.elapsed_ms, filter = ?filter, "cerca següent");
+        Ok(sum)
+    })
+}
+
+#[tauri::command]
+pub async fn scan_results(state: State<'_, SessionState>, offset: usize, limit: usize) -> AppResult<Vec<ScanHit>> {
+    state.with(|s| {
+        let guard = s.scan.lock().unwrap_or_else(|e| e.into_inner());
+        Ok(guard.as_ref().map(|scan| scan.page(s.process.as_ref(), &s.modules, offset, limit.min(500))).unwrap_or_default())
+    })
+}
+
+#[tauri::command]
+pub fn scan_reset(state: State<'_, SessionState>) -> AppResult<()> {
+    state.with(|s| {
+        *s.scan.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(())
+    })
+}
+
+fn parse_address(address: &str) -> AppResult<u64> {
+    Offset::parse(address)
+        .filter(|a| *a > 0)
+        .map(|a| a as u64)
+        .ok_or_else(|| AppError::InvalidValue(format!("adreça invàlida «{address}»")))
+}
+
+/// Escriu un valor a una adreça trobada amb l'escàner (passa per les validacions d'escriptura).
+#[tauri::command]
+pub async fn scan_write(state: State<'_, SessionState>, address: String, value_type: ValueType, value: f64) -> AppResult<MemoryReading> {
+    let address = parse_address(&address)?;
+    let bytes = value_type.encode(value)?;
+    state.with(|s| {
+        s.process.write_bytes(address, &bytes, WriteMode::Data)?;
+        let mut b = vec![0u8; value_type.size()];
+        s.process.read_bytes(address, &mut b)?;
+        tracing::info!(address = format_args!("{address:#x}"), value, "valor escrit des de l'escàner");
+        Ok(MemoryReading { address: format!("{address:#x}"), value: value_type.decode(&b)? })
+    })
+}
+
+/// Busca variables globals que apuntin a l'adreça (o just abans): candidats per a un truc
+/// que continuï funcionant després de reiniciar el joc.
+#[tauri::command]
+pub async fn find_pointers(state: State<'_, SessionState>, address: String) -> AppResult<Vec<PointerCandidate>> {
+    let target = parse_address(&address)?;
+    state.with(|s| Ok(scanner::find_static_pointers(s.process.as_ref(), &s.modules, target, 0x1000, 20)))
+}
+
+/// Afegeix un truc a la definició del joc adjuntat (en crea una si cal) i la recarrega.
+/// Retorna la ruta del fitxer desat.
+#[tauri::command]
+pub async fn save_cheat(
+    app: AppHandle,
+    state: State<'_, SessionState>,
+    store: State<'_, TrainerStore>,
+    games: State<'_, GameStore>,
+    cheat: CheatDef,
+) -> AppResult<String> {
+    let (exe, arch, path) = state.with(|s| Ok((s.process.name.clone(), s.process.arch, s.process.path.clone())))?;
+    let sha = exe_sha256(std::path::Path::new(&path)).unwrap_or_default();
+    let (def, file) = editor::add_cheat(&store, &exe, arch, &sha, cheat)?;
+    games.rematch(&store.catalog.read().unwrap_or_else(|e| e.into_inner()));
+    state.reload_trainer(&app)?;
+    let _ = tauri::Emitter::emit(&app, "trainers-changed", ());
+    tracing::info!(trainer = %def.id, "definició desada");
+    Ok(file.display().to_string())
 }
 
 // --- Depuració (Fase 2): llegir/escriure qualsevol localitzador ---

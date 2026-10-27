@@ -13,6 +13,7 @@ pub mod freeze;
 pub mod locator;
 pub mod pointer;
 pub mod process;
+pub mod scanner;
 pub mod value;
 
 use crate::error::{AppError, AppResult};
