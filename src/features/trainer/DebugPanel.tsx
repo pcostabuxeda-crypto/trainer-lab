@@ -3,7 +3,7 @@ import { Button } from "../../components/ui/Button";
 import * as ipc from "../../lib/ipc";
 import type { Locator, ValueType } from "../../lib/ipc";
 
-const TYPES: ValueType[] = ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool"];
+const TYPES: ValueType[] = ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "decimal", "bool"];
 
 // Camps del joc de prova: AOB del magic "TLABANCH" + 8 = punter al Player, + offset del camp
 const anchor = (field: string): Locator => ({

@@ -516,6 +516,11 @@
           "const": "bool"
         },
         {
+          "description": "System.Decimal de .NET (16 bytes): jocs Unity/C# que guarden diners sense errors d'arrodoniment",
+          "type": "string",
+          "const": "decimal"
+        },
+        {
           "description": "Seqüència de bytes en cru (només per a patches de codi)",
           "type": "string",
           "const": "bytes"

@@ -93,7 +93,7 @@ fn alignment(ty: ValueType) -> usize {
 /// en cèntims, a mig cèntim.
 fn equals_scaled(ty: ValueType, scale: f64, a: f64, b: f64) -> bool {
     match ty {
-        ValueType::F32 | ValueType::F64 => (a - b).abs() < 0.01,
+        ValueType::F32 | ValueType::F64 | ValueType::Decimal => (a - b).abs() < 0.01,
         _ if scale != 1.0 => (a - b).abs() < 0.5 / scale,
         _ => a == b,
     }
@@ -123,7 +123,7 @@ pub fn first_scan(mem: &dyn Memory, value_type: ValueType, value: f64) -> ScanSt
 }
 
 /// Un número visible no determina el tipus amb què el joc el desa.
-const AUTO_TYPES: [ValueType; 4] = [ValueType::F64, ValueType::F32, ValueType::I64, ValueType::I32];
+const AUTO_TYPES: [ValueType; 5] = [ValueType::F64, ValueType::F32, ValueType::I64, ValueType::I32, ValueType::Decimal];
 
 pub fn first_scan_auto(mem: &dyn Memory, value: f64) -> ScanState {
     first_scan_targets_in(mem, &auto_targets(value), value, 0x10000, USER_END, MAX_HITS)
@@ -144,10 +144,18 @@ fn auto_targets(value: f64) -> Vec<(ValueType, f64)> {
 /// comparació de memòria); els decimals es converteixen directament, sense passar per `decode`.
 type Matcher = Box<dyn Fn(&[u8]) -> bool>;
 
-fn matcher(ty: ValueType, value: f64) -> Matcher {
+/// `with_i64`: la mateixa cerca ja busca i64. Un decimal sense escala ni part alta és un i64
+/// 8 bytes més enllà (escriure'l allà fa el mateix), així que no el dupliquem.
+fn matcher(ty: ValueType, value: f64, with_i64: bool) -> Matcher {
     match ty {
         ValueType::F32 => Box::new(move |b| (f32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f64 - value).abs() < 0.01),
         ValueType::F64 => Box::new(move |b| (f64::from_le_bytes(b[..8].try_into().unwrap()) - value).abs() < 0.01),
+        // Filtre ràpid pels bytes de `flags` abans de convertir
+        ValueType::Decimal => Box::new(move |b| {
+            b[0] == 0 && b[1] == 0 && b[3] & 0x7F == 0
+                && !(with_i64 && b[..8] == [0; 8])
+                && super::value::decode_decimal(b).is_some_and(|v| (v - value).abs() < 0.01)
+        }),
         _ => match ty.encode(value) {
             Ok(target) => Box::new(move |b| b == target.as_slice()),
             Err(_) => Box::new(|_| false),
@@ -166,10 +174,11 @@ fn first_scan_types_in(mem: &dyn Memory, types: &[ValueType], value: f64, start:
 
 /// `targets`: (tipus, escala). La memòria es compara amb `value × escala`.
 fn first_scan_targets_in(mem: &dyn Memory, targets: &[(ValueType, f64)], value: f64, start: u64, end: u64, max: usize) -> ScanState {
+    let with_i64 = targets.contains(&(ValueType::I64, 1.0));
     let matchers: Vec<_> = targets.iter().copied()
         .map(|(ty, scale)| (ty, scale, if scale == 1.0 { value } else { (value * scale).round() }))
         .filter(|(ty, _, raw)| ty.is_numeric() && ty.encode(*raw).is_ok())
-        .map(|(ty, scale, raw)| (ty, scale, matcher(ty, raw))).collect();
+        .map(|(ty, scale, raw)| (ty, scale, matcher(ty, raw, with_i64))).collect();
     let mut hits = Vec::new();
     let mut truncated = false;
     'regions: for r in mem.regions(start, end).iter().filter(|r| scannable(r)) {
@@ -177,8 +186,8 @@ fn first_scan_targets_in(mem: &dyn Memory, targets: &[(ValueType, f64)], value: 
         let to = r.end().min(end);
         while pos < to {
             let stride = (CHUNK as u64).min(to - pos) as usize;
-            // Solapament per als f64/i64 alineats a 4 bytes que travessen un bloc.
-            let len = ((stride + 4) as u64).min(to - pos) as usize;
+            // Solapament per als valors alineats a 4 bytes que travessen un bloc (fins a 16 bytes).
+            let len = ((stride + 12) as u64).min(to - pos) as usize;
             let mut buf = vec![0u8; len];
             if mem.read_bytes(pos, &mut buf).is_ok() {
                 // Una sola lectura de memòria per bloc, compartida entre els tipus.
@@ -396,6 +405,20 @@ mod tests {
         s.next_scan(&m, ScanFilter::Decreased).unwrap();
         assert_eq!(s.count(), 2, "un cèntim menys també compta");
         assert!(auto_targets(100.0).iter().all(|(_, sc)| *sc == 1.0), "sense decimals no busquem cèntims");
+    }
+
+    #[test]
+    fn automatic_scan_finds_dotnet_decimal() {
+        let m = FakeMemory::new(0x10000, 0x100, 8);
+        m.put(0x10020, &ValueType::Decimal.encode(24.7009).unwrap());
+        m.put(0x10088, &100i64.to_le_bytes()); // 8 zeros + 100: és un i64, no un decimal més
+        let s = first_scan_auto_in(&m, 24.70);
+        let hits = s.page(&m, &[], 0, 10);
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!((hits[0].address.as_str(), hits[0].value_type), ("0x10020", ValueType::Decimal));
+        let ints = first_scan_auto_in(&m, 100.0).page(&m, &[], 0, 10);
+        assert!(ints.iter().all(|h| h.value_type != ValueType::Decimal), "{ints:?}");
+        assert_eq!(first_scan_in(&m, ValueType::Decimal, 100.0, 0x10000, u64::MAX, 100).count(), 1, "cerca només de decimals");
     }
 
     fn first_scan_auto_in(m: &FakeMemory, v: f64) -> ScanState {

@@ -6,7 +6,7 @@ import type { ScanFilter, ScanHit, ScanSummary, ValueType } from "../../lib/ipc"
 import { useSession } from "../../stores/session";
 import { SaveCheatDialog } from "./SaveCheatDialog";
 
-const TYPES: ValueType[] = ["i32", "f32", "i64", "f64", "i16", "u8", "u16", "u32", "u64", "i8"];
+const TYPES: ValueType[] = ["i32", "f32", "i64", "f64", "i16", "u8", "u16", "u32", "u64", "i8", "decimal"];
 const FILTERS: { id: ScanFilter["kind"]; label: string }[] = [
   { id: "exact", label: "Valor exacte" },
   { id: "decreased", label: "Ha disminuït" },

@@ -307,3 +307,23 @@ d'oracle («Te faltan $X» = 250 − diners reals). Cada valor de prova s'ha res
 **Decisió**: no s'intenta saltar aquesta protecció (requisit del projecte: cap bypass
 d'anti-cheat). L'assistent funciona; és aquest joc el que no ho permet per als diners.
 Els tests ignorats `scan_dump` i `scan_list` queden com a eines de diagnòstic.
+
+## 27 oct 2026 — Moon Sweepers: els diners eren un `decimal`
+
+L'hipòtesi de la «còpia ombra» era falsa: els diners no estan protegits, sinó desats com a
+`System.Decimal` de .NET (16 bytes: escala + mantissa de 96 bits), un tipus que l'escàner no
+buscava. Els `f64` en clar eren còpies per a la pantalla.
+
+**Com s'ha trobat** (només lectura externa, sense injecció ni dumper): noms de camps a
+`global-metadata.dat` → `FieldInfo` d'IL2CPP a la memòria del joc (nom, tipus, classe, offset)
+→ `MoonCrewSession.Instance` (+0x1B0) → `MoonWorld` (+0x538 `wallets`) → `TeamWallet.Balance` (+0x10).
+La política de l'usuari permet tocar-ho jugant sol.
+
+**Canvis**
+- `ValueType::Decimal`: codifica amb els decimals mínims (999 → escala 0) i rebutja bytes amb
+  bits reservats. L'escàner automàtic el busca; s'hi descarten els que són un `i64` 8 bytes més
+  enllà (el mateix valor, ja trobat com a `i64`).
+- Truc de l'usuari a `%APPDATA%\cat.trainerlab.app\trainers\moon-sweepers.json`: «Diners» (valor)
+  i «+1.000 $» (F5). Punt de partida per patró AOB del getter `MoonCrewSession.get_Instance`
+  (rip-relative): si una actualització canvia el codi, el truc falla en lloc d'escriure a cegues.
+- Provat al joc des de l'app: +1.000 → HUD 1.02K; Aplica 9999 → 9.99K. Diners restaurats.
