@@ -143,3 +143,32 @@
 
 **Notes**
 - GOG no està instal·lat en aquest PC: el proveïdor no s'ha provat amb dades reals.
+
+## Fase 5 — Escàner de memòria i editor de trainers (27/10/2026)
+
+**Fet**
+- `memory/scanner.rs`: primera cerca per valor exacte en totes les regions escrivibles
+  (alineada, en blocs de 4 MB, màxim 2 M de resultats) i cerques següents (exacte, ha
+  canviat, no ha canviat, ha augmentat, ha disminuït) rellegint per blocs de 64 KB.
+- Cerca de punters estàtics d'un nivell (`find_static_pointers`) per convertir una adreça del
+  heap en un localitzador que sobreviu als reinicis.
+- `trainers/editor.rs`: «Desa com a truc» afegeix el truc a la definició de l'usuari, en copia
+  l'exemple inclòs o en crea una de nova. Validació completa i escriptura atòmica.
+- Sessió: estat de l'escaneig per joc adjuntat i `reload_trainer` després de desar.
+- UI: pantalla **Escàner** (tipus, valor, condicions, resultats en directe quan n'hi ha
+  ≤ 100, Escriu) i diàleg **Desa com a truc** (nom, categoria, tipus de truc, valors,
+  drecera, localitzador editable i cerca de punter estàtic).
+- S'ha esborrat el component `Placeholder`, que ja no feia servir cap pantalla.
+
+**Verificat**
+- `cargo test --workspace`: 102 tests unitaris + 3 d'integració. El nou fa el recorregut
+  amb el joc real: primera cerca de 100, rep mal, «exacte 85» + «no ha canviat», la vida és
+  entre els resultats, és dinàmica, i la cerca de punters troba l'àncora de `test-game.exe`
+  amb offset 0.
+- `cargo clippy` sense avisos; `npm run typecheck` i `vite build` OK.
+- Flux de la UI provat al navegador amb el backend simulat: cerca, refinar, desar com a truc,
+  cercar el punter i enviar un `CheatDef` vàlid.
+
+**No verificat**
+- «Desa com a truc» de punta a punta a l'app real (la recàrrega de la sessió no té test
+  automàtic; l'escriptura i la validació sí).

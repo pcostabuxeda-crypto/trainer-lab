@@ -4,8 +4,8 @@ Aplicació d'escriptori per a Windows per crear i fer servir **trainers** (trucs
 **single-player o offline**. Els trucs es defineixen en fitxers JSON. L'app llegeix i
 escriu la memòria del joc **des de fora**, sense injectar codi.
 
-> **Estat:** Fase 4 de 5. Detecta els jocs de Steam, Epic i GOG i quins estan en marxa; els
-> trucs es defineixen en JSON, amb pantalla pròpia i dreceres globals. Vegeu [DEVLOG.md](DEVLOG.md), [com funciona](docs/ARCHITECTURE.md) i el
+> **Estat:** les 5 fases fetes. Biblioteca (Steam, Epic, GOG), trucs definits en JSON amb
+> dreceres globals, i escàner de memòria per crear-ne de nous. Vegeu [DEVLOG.md](DEVLOG.md), [com funciona](docs/ARCHITECTURE.md) i el
 > [pla d'arquitectura](docs/PLA_ARQUITECTURA.md).
 
 ## Límits que l'app respecta
@@ -89,9 +89,9 @@ Els logs es desen a `%LOCALAPPDATA%\cat.trainerlab.app\logs\` i també es poden 
 Exemple complet i comentat: [trainers/test-game.json](trainers/test-game.json). Format
 detallat: [docs/PLA_ARQUITECTURA.md §4](docs/PLA_ARQUITECTURA.md#4-format-de-definició-de-trainers).
 
-1. **Troba el valor.** Amb el joc obert, localitza l'adreça de la vida, els diners, etc. De
-   moment ho pots fer amb el panell de depuració de la pantalla Trainer o amb una eina externa.
-   L'escàner integrat arriba a la Fase 5.
+1. **Troba el valor amb l'escàner** (vegeu la secció següent). Des del mateix escàner pots
+   **Desa com a truc**: l'app crea o amplia la definició i et porta a la pantalla del trainer.
+   Els passos d'aquí sota són per escriure o retocar la definició a mà.
 2. **Fes-la estable.** Una adreça absoluta canvia a cada partida. Fes servir:
    - `"offset"` + `"pointers"`: mòdul + offset fix i la cadena de punters fins al valor;
    - o `"aob"`: un patró de bytes que no canviï entre versions, més `"pointers"`.
@@ -119,9 +119,26 @@ detallat: [docs/PLA_ARQUITECTURA.md §4](docs/PLA_ARQUITECTURA.md#4-format-de-de
 Les dreceres per defecte són les del JSON. Per canviar-les, clica-hi a la pantalla Trainer i
 prem la combinació nova. **Supr** la desactiva i **↺** torna a la del fitxer.
 
+## L'escàner de memòria
+
+1. Adjunta't al joc i obre **Escàner**.
+2. Tria el tipus (`i32` serveix per a la majoria de comptadors; `f32` per a barres i
+   velocitats) i escriu el valor que veus al joc. **Primera cerca**.
+3. Canvia el valor jugant (rep mal, gasta diners) i fes **Cerca següent** amb la condició que
+   toqui: *valor exacte*, *ha disminuït*, *ha augmentat*, *ha canviat* o *no ha canviat*.
+4. Quan en quedin pocs, els valors s'actualitzen sols. Prova **Escriu** per confirmar quina
+   és la bona.
+5. **Desa com a truc**:
+   - si l'adreça és **estàtica** (`joc.exe+0x…`), ja es pot desar tal qual;
+   - si és **dinàmica** (al heap), prem **Busca un punter estàtic**. Si l'app troba una
+     variable global que hi apunta, el truc funcionarà després de reiniciar el joc.
+
 ## Limitacions conegudes
 
-- Encara no té escàner de memòria (Fase 5).
+- L'escàner no té «valor inicial desconegut»: la primera cerca sempre és amb un valor exacte.
+- La cerca de punters és d'**un nivell** (variable global → objecte → camp). Les cadenes més
+  llargues s'han de trobar amb una altra eina i escriure a mà al localitzador.
+- Desar un truc nou reinicia els trucs actius del joc (es restauren els valors originals).
 - Altres botigues (EA app, Ubisoft Connect, Xbox, Battle.net…) no es detecten soles:
   afegeix-les amb **Afegeix .exe**.
 - Algunes dreceres poden no arribar a jocs que capturen el teclat a baix nivell (p. ex. en

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
-import { Placeholder } from "../components/ui/Placeholder";
 import { LibraryPage } from "../features/library/LibraryPage";
+import { ScannerPage } from "../features/scanner/ScannerPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TrainerPage } from "../features/trainer/TrainerPage";
 import { useGames } from "../stores/games";
@@ -78,11 +78,7 @@ export default function App() {
         <main className="min-h-0 flex-1 overflow-hidden p-5">
           {page === "library" && <LibraryPage />}
           {page === "trainer" && <TrainerPage />}
-          {page === "scanner" && (
-            <Placeholder title="Escàner de memòria" phase={5}>
-              Cerca de valors (exacte, canviat, augmentat…) i desar troballes com a trucs nous.
-            </Placeholder>
-          )}
+          {page === "scanner" && <ScannerPage onSaved={() => setPage("trainer")} />}
           {page === "settings" && <SettingsPage />}
         </main>
       </div>

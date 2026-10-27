@@ -131,3 +131,34 @@ fn example_definition_works_on_the_test_game() {
     assert!(line.contains("vida   85"), "{line}");
     writeln!(game.0.stdin.as_mut().unwrap(), "q").unwrap();
 }
+
+#[test]
+fn scanner_finds_health_and_its_static_pointer() {
+    use trainer_lab_lib::memory::scanner::{ScanFilter, find_static_pointers, first_scan};
+    use trainer_lab_lib::memory::value::ValueType;
+
+    let (mut game, mut out) = start_game();
+    let p = Process::open(game.0.id()).unwrap();
+    let modules = p.modules().unwrap();
+    let health = locator::resolve(&p, &modules, &health_locator("0x0")).unwrap();
+
+    // 1. Vida = 100: surten moltes adreces amb un 100
+    let mut scan = first_scan(&p, ValueType::I32, 100.0);
+    assert!(scan.count() > 1, "hi ha més d'un 100 a la memòria");
+    // 2. Rep mal (85) i refina: «exacte 85» i després «no ha canviat»
+    status_line(&mut game, &mut out, "d");
+    scan.next_scan(&p, ScanFilter::Exact { value: 85.0 });
+    scan.next_scan(&p, ScanFilter::Unchanged);
+    let hits = scan.page(&p, &modules, 0, 50);
+    assert!(hits.iter().any(|h| h.address == format!("{health:#x}")), "la vida és entre els resultats: {hits:?}");
+    let h = hits.iter().find(|h| h.address == format!("{health:#x}")).unwrap();
+    assert_eq!(h.module_offset, None, "la vida és al heap (dinàmica)");
+
+    // 3. El punter estàtic és l'ANCHOR del joc: test-game.exe+offset, amb offset 0 dins del Player
+    let candidates = find_static_pointers(&p, &modules, health, 0x100, 10);
+    assert!(
+        candidates.iter().any(|c| c.module == "test-game.exe" && c.pointer_offset == "0x0"),
+        "{candidates:?}"
+    );
+    writeln!(game.0.stdin.as_mut().unwrap(), "q").unwrap();
+}
