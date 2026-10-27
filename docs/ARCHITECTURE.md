@@ -273,10 +273,17 @@ ajudants (crash handlers, desinstal·ladors…) s'ignoren. Si la llista canvia, 
 
 ## 12. Escàner de memòria ([`memory/scanner.rs`](../src-tauri/src/memory/scanner.rs))
 
-**Primera cerca.** Recorre totes les regions **escrivibles** del joc (les dades; el codi i les
-constants no canvien) en blocs de 4 MB i compara cada posició **alineada** a la mida del tipus
+**Primera cerca.** Recorre les regions **escrivibles** privades o d'imatge del joc (les dades;
+el codi i les constants no canvien, i la memòria *mapejada* —fitxers, memòria compartida amb la
+GPU— se salta com fa Cheat Engine per defecte) en blocs de 4 MB i compara cada posició **alineada** a la mida del tipus
 (4 bytes per a `i32`/`f32`). Els compiladors alineen les variables, així que n'hi ha prou i és
-molt més ràpid. Es guarden com a molt 2 milions de resultats (adreça + valor, 16 bytes cadascun).
+molt més ràpid. Els enters es comparen com a bytes (una comparació de memòria) i els decimals es
+converteixen directament. Es guarden com a molt 2 milions de resultats (16 bytes cadascun).
+
+**Sense bloquejar l'app.** Una cerca en un joc gran pot trigar uns segons. Es fa sense tenir
+la sessió bloquejada: la congelació, les dreceres i la UI continuen funcionant. A més, totes les
+comandes que toquen la sessió són `async`, perquè Tauri executa les síncrones al fil de la
+finestra i, si haguessin d'esperar, Windows la marcaria com a «No respon».
 
 **Cerques següents.** Només es rellegeixen les adreces que queden. Les que són a prop
 (menys de 64 KB) es llegeixen juntes en un sol `ReadProcessMemory`, que és el que costa. Si un

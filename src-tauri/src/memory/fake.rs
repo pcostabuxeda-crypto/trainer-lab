@@ -57,6 +57,7 @@ impl Memory for FakeMemory {
             writable: self.writable,
             executable: false,
             guard: false,
+            mapped: false,
         })
     }
 }

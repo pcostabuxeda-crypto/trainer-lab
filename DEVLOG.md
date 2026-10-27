@@ -214,3 +214,20 @@ un disseny propi.
   Configuració es quedava en blanc. Ara els efectes fan servir claus.
 - Verificat: 105 tests unitaris, clippy, typecheck. Configuració provada al navegador amb dades
   simulades (llistar, oblidar un, oblidar-ho tot).
+
+### L'app es quedava «No respon» durant les cerques (27/10/2026)
+
+**Causa:** la primera cerca a Moon Sweepers trigava ~40 s i tenia la sessió bloquejada tota
+l'estona. Algunes comandes síncrones (que Tauri executa al fil de la finestra) esperaven aquest
+bloqueig, i Windows marcava la finestra com a «No respon».
+
+**Solució**
+- L'escàner treballa amb el procés fora del bloqueig de la sessió i desa els resultats al final
+  (només si la sessió encara és del mateix joc).
+- Totes les comandes que toquen la sessió són `async`: mai s'executen al fil de la finestra.
+- Primera cerca més ràpida: comparació directa de bytes (enters) o de `f32`/`f64` (decimals),
+  i el crate de l'app es compila amb `opt-level = 3` també en desenvolupament.
+- Es salta la memòria mapejada (`MEM_MAPPED`), com fa Cheat Engine per defecte.
+
+**Mesura** (test ignorat `scan_benchmark`, Moon Sweepers, només lectura): `f32` 6,71 de
+~40 s → **4,3 s**; `i32` 100 → 5,0 s. 105 tests unitaris + 3 d'integració, clippy net.

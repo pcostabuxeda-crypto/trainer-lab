@@ -95,16 +95,35 @@ fn keep(ty: ValueType, filter: ScanFilter, now: f64, before: f64) -> bool {
     }
 }
 
+/// Memòria on un joc guarda les seves dades: privada (heap) o de les seves imatges (globals).
+/// Les regions mapejades (fitxers, memòria compartida amb la GPU) es salten, com fa Cheat Engine
+/// per defecte: hi ha molts megabytes i gairebé mai hi ha valors del joc.
 fn scannable(r: &Region) -> bool {
-    r.committed && r.readable && r.writable && !r.guard
+    r.committed && r.readable && r.writable && !r.guard && !r.mapped
 }
 
 pub fn first_scan(mem: &dyn Memory, value_type: ValueType, value: f64) -> ScanState {
     first_scan_in(mem, value_type, value, 0x10000, USER_END, MAX_HITS)
 }
 
+/// Comparador ràpid per a la primera cerca: els enters es comparen com a bytes (una
+/// comparació de memòria); els decimals es converteixen directament, sense passar per `decode`.
+type Matcher = Box<dyn Fn(&[u8]) -> bool>;
+
+fn matcher(ty: ValueType, value: f64) -> Matcher {
+    match ty {
+        ValueType::F32 => Box::new(move |b| (f32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f64 - value).abs() < 0.01),
+        ValueType::F64 => Box::new(move |b| (f64::from_le_bytes(b[..8].try_into().unwrap()) - value).abs() < 0.01),
+        _ => match ty.encode(value) {
+            Ok(target) => Box::new(move |b| b == target.as_slice()),
+            Err(_) => Box::new(|_| false),
+        },
+    }
+}
+
 fn first_scan_in(mem: &dyn Memory, ty: ValueType, value: f64, start: u64, end: u64, max: usize) -> ScanState {
     let (size, align) = (ty.size(), alignment(ty));
+    let is_match = matcher(ty, value);
     let mut hits = Vec::new();
     let mut truncated = false;
     'regions: for r in mem.regions(start, end).iter().filter(|r| scannable(r)) {
@@ -118,14 +137,14 @@ fn first_scan_in(mem: &dyn Memory, ty: ValueType, value: f64, start: u64, end: u
                 // posicions alineades dins del buffer també ho són a la memòria
                 let mut i = 0;
                 while i + size <= len {
-                    if let Ok(v) = ty.decode(&buf[i..i + size])
-                        && equals(ty, v, value)
-                    {
+                    let bytes = &buf[i..i + size];
+                    if is_match(bytes) {
                         if hits.len() >= max {
                             truncated = true;
                             break 'regions;
                         }
-                        hits.push(Hit { address: pos + i as u64, previous: v });
+                        let previous = ty.decode(bytes).unwrap_or(value);
+                        hits.push(Hit { address: pos + i as u64, previous });
                     }
                     i += align;
                 }

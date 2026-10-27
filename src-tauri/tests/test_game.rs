@@ -162,3 +162,19 @@ fn scanner_finds_health_and_its_static_pointer() {
     );
     writeln!(game.0.stdin.as_mut().unwrap(), "q").unwrap();
 }
+
+/// Mesura de velocitat de la primera cerca contra un procés real (només lectura):
+/// `BENCH_PID=1234 cargo test -p trainer-lab --test test_game scan_benchmark -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn scan_benchmark() {
+    use trainer_lab_lib::memory::scanner::first_scan;
+    use trainer_lab_lib::memory::value::ValueType;
+    let pid: u32 = std::env::var("BENCH_PID").expect("cal BENCH_PID").parse().unwrap();
+    let p = Process::open(pid).unwrap();
+    for (ty, v) in [(ValueType::F32, 6.71), (ValueType::I32, 100.0)] {
+        let t = std::time::Instant::now();
+        let s = first_scan(&p, ty, v);
+        println!("{ty:?} {v}: {} resultats en {:?}", s.count(), t.elapsed());
+    }
+}
