@@ -261,7 +261,7 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
         return (
           <Card title="Gairebé! Provem-ho">
             <p className="text-sm text-muted">
-              Candidat {step.index + 1} de {step.candidates.length}. Posarem {thing} a aquest valor i mira si canvia al joc:
+              Candidat {step.index + 1} de {step.candidates.length}. Aquí hi havia {thing}: escriu-hi un valor nou i mira si canvia al joc.
             </p>
             <div className="flex items-center gap-3">
               {input({ value: testValue, onChange: setTestValue, onEnter: () => {} })}
@@ -290,7 +290,7 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
                 <p className="text-sm text-warn">
                   {step.now === null
                     ? "No hem pogut tornar a llegir aquesta adreça: el joc l'ha alliberada."
-                    : `El joc l'ha tornat a posar a ${step.now} al cap d'un segon: és una còpia que el joc recalcula, no la que guarda ${thing}.`}
+                    : `El joc l'ha tornat a posar a ${Number(step.now).toLocaleString("ca", { maximumFractionDigits: 2 })} al cap d'un segon: aquí només hi ha una còpia que el joc recalcula. El valor de debò és en un altre lloc.`}
                 </p>
                 <Button variant="primary" className="self-start" disabled={busy} onClick={() => void next()}>
                   {step.index + 1 < step.candidates.length ? "Prova el següent" : "D'acord"}
