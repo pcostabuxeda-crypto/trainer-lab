@@ -1,0 +1,17 @@
+# Recerca local (mai es publica)
+research/
+
+# Node / Vite
+node_modules
+dist
+*.local
+*.log
+
+# Rust / Tauri
+/target/
+src-tauri/gen/schemas
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
