@@ -1,0 +1,30 @@
+{
+  "name": "trainer-lab",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
+    "types": "cargo test -p trainer-lab --lib export_bindings",
+    "tauri": "tauri",
+    "test-game": "cargo run -p test-game"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.13",
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^18.3.24",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.0.2",
+    "tailwindcss": "^4.1.13",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
+  }
+}

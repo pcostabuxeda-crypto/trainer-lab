@@ -1,0 +1,8 @@
+[package]
+name = "test-game"
+version = "0.1.0"
+description = "Joc de prova de Trainer Lab: vida, munició, diners i velocitat en memòria"
+publish = false
+edition = "2024"
+
+[dependencies]

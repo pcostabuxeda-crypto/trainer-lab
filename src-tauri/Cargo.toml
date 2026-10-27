@@ -1,0 +1,33 @@
+[package]
+name = "trainer-lab"
+version = "0.1.0"
+description = "Trainer Lab: trainers per a jocs single-player"
+authors = ["pcostabuxeda"]
+publish = false
+edition = "2024"
+
+[lib]
+# El sufix `_lib` evita un conflicte de noms amb el binari a Windows (cargo#8519)
+name = "trainer_lab_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["registry", "fmt"] }
+tracing-appender = "0.2"
+ts-rs = "11"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+] }
