@@ -260,8 +260,9 @@ Abans d'obrir el procés (i, per tant, abans de qualsevol lectura):
 1. Si la definició té `online: true` → **bloquejat**.
 2. Si el procés té carregat algun mòdul conegut (`EasyAntiCheat*.dll`, `BEClient*.dll`,
    `vgk*`, …) → **bloquejat**. Llistar mòduls no requereix permisos d'escriptura.
-3. Si hi ha processos o serveis d'anti-cheat actius (`EasyAntiCheat*.exe`, `BEService*.exe`,
-   `vgc.exe`, `FACEIT*.exe`, …) → **bloquejat**.
+3. Si hi ha processos o serveis d'anti-cheat actius al sistema però no dins del joc
+   (`EasyAntiCheat*.exe`, `BEService*.exe`, `vgc.exe`, `FACEIT*.exe`, …) → **avís** que cal
+   confirmar. *(Decidit a la Fase 2: Vanguard s'executa sempre i bloquejaria l'app sencera.)*
 4. Si a la carpeta del joc hi ha `EasyAntiCheat/`, `BattlEye/` o similars → **avís**, i
    l'usuari ha de confirmar que juga en mode offline.
 

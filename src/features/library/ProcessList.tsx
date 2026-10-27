@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { useProcesses } from "../../stores/processes";
+import { useSession } from "../../stores/session";
 
 export function ProcessList() {
   const { list, loading, error, refresh } = useProcesses();
+  const { info, busy, error: attachError, attach } = useSession();
   const [query, setQuery] = useState("");
   const [showSystem, setShowSystem] = useState(false);
 
@@ -47,7 +49,11 @@ export function ProcessList() {
         </div>
       </header>
 
-      {error && <p className="border-b border-line bg-bad/10 p-3 text-sm text-bad">{error}</p>}
+      {(error ?? attachError) && (
+        <p role="alert" className="border-b border-line bg-bad/10 p-3 text-sm text-bad">
+          {error ?? attachError}
+        </p>
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm">
@@ -57,6 +63,7 @@ export function ProcessList() {
               <th className="px-3 py-2 font-medium">PID</th>
               <th className="px-3 py-2 font-medium">Arq.</th>
               <th className="px-3 py-2 font-medium">Ruta</th>
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -75,6 +82,17 @@ export function ProcessList() {
                   </td>
                   <td className="selectable max-w-0 truncate px-3 py-1.5 font-mono text-xs text-muted" title={p.path ?? ""}>
                     {p.path ?? "— sense accés"}
+                  </td>
+                  <td className="px-3 py-1 text-right">
+                    {info?.pid === p.pid ? (
+                      <Badge tone="ok">adjuntat</Badge>
+                    ) : (
+                      p.path !== null && (
+                        <Button disabled={busy} onClick={() => void attach(p.pid, p.name)}>
+                          Adjunta
+                        </Button>
+                      )
+                    )}
                   </td>
                 </tr>
               );

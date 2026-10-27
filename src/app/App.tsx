@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { Placeholder } from "../components/ui/Placeholder";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { TrainerPage } from "../features/trainer/TrainerPage";
+import { useSession } from "../stores/session";
 
 const PAGES = [
   { id: "library", label: "Biblioteca" },
@@ -14,6 +17,12 @@ type PageId = (typeof PAGES)[number]["id"];
 
 export default function App() {
   const [page, setPage] = useState<PageId>("library");
+  const { info, pending, lastDetach, confirmPending, cancelPending } = useSession();
+
+  // En adjuntar-se a un joc, anem directament a la seva pantalla
+  useEffect(() => {
+    if (info) setPage("trainer");
+  }, [info?.pid]);
 
   return (
     <div className="flex h-full">
@@ -40,17 +49,19 @@ export default function App() {
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-5 text-sm">
-          <span className="size-2 rounded-full bg-muted" />
-          <span className="text-muted">Cap joc adjuntat</span>
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-5 text-sm" aria-live="polite">
+          <span className={`size-2 rounded-full ${info ? "bg-ok" : "bg-muted"}`} />
+          {info ? (
+            <span>
+              Adjuntat a <strong>{info.name}</strong> <span className="font-mono text-muted">PID {info.pid}</span>
+            </span>
+          ) : (
+            <span className="text-muted">{lastDetach ?? "Cap joc adjuntat"}</span>
+          )}
         </header>
         <main className="min-h-0 flex-1 overflow-hidden p-5">
           {page === "library" && <LibraryPage />}
-          {page === "trainer" && (
-            <Placeholder title="Detall del joc" phase={3}>
-              Estat de la sessió, versió del joc, trucs i hotkeys.
-            </Placeholder>
-          )}
+          {page === "trainer" && <TrainerPage />}
           {page === "scanner" && (
             <Placeholder title="Escàner de memòria" phase={5}>
               Cerca de valors (exacte, canviat, augmentat…) i desar troballes com a trucs nous.
@@ -59,6 +70,16 @@ export default function App() {
           {page === "settings" && <SettingsPage />}
         </main>
       </div>
+
+      {pending && (
+        <ConfirmDialog
+          title="Anti-cheat en marxa al sistema"
+          message={pending.message}
+          confirmLabel={`Adjunta igualment a ${pending.name}`}
+          onConfirm={() => void confirmPending()}
+          onCancel={cancelPending}
+        />
+      )}
     </div>
   );
 }

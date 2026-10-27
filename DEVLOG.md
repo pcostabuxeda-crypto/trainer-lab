@@ -45,3 +45,40 @@
 - La plantilla portava React 19. S'ha fixat a **React 18**, tal com demana l'especificació.
 - En desenvolupament, `list_processes` es crida dos cops a l'arrencada per `StrictMode`
   de React. És normal i no passa en producció.
+
+## Fase 2 — Memòria, pointer chains i congelació (27/10/2026)
+
+**Fet**
+- `memory/mod.rs`: trait `Memory` (llegir, escriure, mida de punter, regions) i
+  `check_write`, que valida cada escriptura (regió amb commit, no guard, dins de límits,
+  escrivible o executable).
+- `memory/process.rs`: `Process::open` amb permisos mínims (`VM_READ/WRITE/OPERATION`,
+  `QUERY_LIMITED_INFORMATION`, `SYNCHRONIZE`). Mòduls amb Toolhelp (inclosos els de 32 bits),
+  `VirtualQueryEx`, patches de codi amb `VirtualProtectEx` + `FlushInstructionCache`.
+- `memory/value.rs`: 11 tipus (`i8`…`f64`, `bool`) amb control de rang.
+- `memory/pointer.rs`: pointer chains amb punters de 4 o 8 bytes i error `NullPointer` per pas.
+- `memory/aob.rs`: parser de patrons amb comodins i escaneig per regions en blocs solapats.
+- `memory/locator.rs`: el format `address` de les definicions (mòdul+offset o AOB, `rip`,
+  `pointers`). Offsets en hex o decimal.
+- `memory/freeze.rs`: fil que reescriu els valors congelats cada 100 ms. Deixa de congelar
+  un valor després de 20 errors seguits.
+- `anticheat.rs`: bloqueja si l'anti-cheat és dins del joc i avisa (amb confirmació) si
+  només és en marxa al sistema. Decidit amb l'usuari perquè Vanguard s'executa sempre.
+- `session.rs`: adjuntar/desadjuntar, fil vigilant que detecta el tancament del joc i
+  esdeveniment `session-state` cap a la UI.
+- UI: botó «Adjunta» a la llista de processos, diàleg de confirmació d'anti-cheat, pantalla
+  Trainer amb un panell de depuració (presets del joc de prova, llegir, escriure, congelar).
+- `docs/ARCHITECTURE.md`: memòria virtual, RPM/WPM, pointer chains, AOB, RIP, congelació.
+
+**Verificat**
+- `cargo test --workspace`: 37 tests unitaris + 1 d'integració. El d'integració obre el
+  `test-game` real, troba la vida per AOB i punter, l'escriu, la congela, comprova que el joc
+  veu els canvis i detecta el tancament.
+- `npm run typecheck` OK. L'app de `tauri dev` s'ha recompilat amb les comandes noves.
+- Flux de la UI provat al navegador amb el backend simulat: avís d'anti-cheat → confirmació →
+  pantalla Trainer → congelar.
+
+**Notes**
+- Els valors viatgen com a `f64`: els enters de més de 2^53 perden precisió (comentat al codi).
+- `Locator.pointers` és opcional al JSON (per defecte, cap punter).
+- El crate només compila a Windows (`compile_error!` explícit).
