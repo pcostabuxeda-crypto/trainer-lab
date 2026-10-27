@@ -201,3 +201,16 @@ un disseny propi.
 
 **No verificat**
 - «Juga» obrint de debò un joc de Steam o Epic.
+
+### Recordar l'avís d'anti-cheat per joc (27/10/2026)
+
+- `settings.json` guarda `acknowledgedWarnings`: ruta de l'exe → avisos acceptats. Si el joc
+  torna a donar els mateixos avisos, l'app s'hi connecta sense preguntar (també la connexió
+  automàtica). Si n'apareix un de nou, torna a preguntar. Els anti-cheats **dins** del joc
+  continuen bloquejant sempre.
+- Configuració → «Avisos d'anti-cheat acceptats»: llista per joc, «Oblida» i «Oblida-ho tot».
+- **Error corregit:** a Chromium recent `scrollIntoView` retorna una Promise. `LogViewer` la
+  retornava des d'un `useEffect`, React la prenia per una funció de neteja i la pantalla de
+  Configuració es quedava en blanc. Ara els efectes fan servir claus.
+- Verificat: 105 tests unitaris, clippy, typecheck. Configuració provada al navegador amb dades
+  simulades (llistar, oblidar un, oblidar-ho tot).

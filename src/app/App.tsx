@@ -89,7 +89,7 @@ export default function App() {
       {pending && (
         <ConfirmDialog
           title="Anti-cheat en marxa al sistema"
-          message={pending.message}
+          message={`${pending.message} Per a aquest joc no t'ho tornarem a preguntar (ho pots desfer a Configuració).`}
           confirmLabel={`Connecta igualment a ${pending.name}`}
           onConfirm={() => void confirmPending()}
           onCancel={cancelPending}

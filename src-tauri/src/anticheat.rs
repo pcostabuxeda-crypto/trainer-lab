@@ -83,6 +83,12 @@ pub fn check_install_dir(entry_names: &[String]) -> Vec<String> {
     found
 }
 
+/// Cal preguntar a l'usuari si hi ha algun avís que encara no hagi acceptat per a aquest joc.
+/// Mai s'aplica als anti-cheats carregats dins del joc: aquests sempre bloquegen.
+pub fn needs_confirmation(warnings: &[String], remembered: &[String]) -> bool {
+    warnings.iter().any(|w| !remembered.contains(w))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,6 +105,15 @@ mod tests {
         );
         assert_eq!(r.in_game, s(&["BattlEye", "Easy Anti-Cheat"]));
         assert_eq!(r.system, s(&["BattlEye", "Riot Vanguard"]));
+    }
+
+    #[test]
+    fn remembered_warnings_only_cover_what_was_accepted() {
+        let v = s(&["Riot Vanguard"]);
+        assert!(!needs_confirmation(&v, &v));
+        assert!(!needs_confirmation(&[], &[]));
+        assert!(needs_confirmation(&v, &[]), "primera vegada");
+        assert!(needs_confirmation(&s(&["Riot Vanguard", "BattlEye"]), &v), "n'hi ha un de nou");
     }
 
     #[test]

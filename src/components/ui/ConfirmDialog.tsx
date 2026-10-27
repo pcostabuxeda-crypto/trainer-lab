@@ -12,7 +12,9 @@ type Props = {
 /** Diàleg modal amb el <dialog> natiu: gestiona el focus i la tecla Esc. */
 export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => ref.current?.showModal(), []);
+  useEffect(() => {
+    ref.current?.showModal();
+  }, []);
 
   return (
     <dialog

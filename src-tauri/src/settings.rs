@@ -25,6 +25,9 @@ pub struct Settings {
     pub auto_attach: bool,
     /// Mostra adreces, eines de depuració i l'escàner tècnic
     pub advanced_mode: bool,
+    /// Avisos d'anti-cheat del sistema que l'usuari ja ha acceptat, per joc:
+    /// ruta de l'exe (en minúscules) → avisos. Si n'apareix un de nou, es torna a preguntar.
+    pub acknowledged_warnings: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -44,6 +47,7 @@ impl Default for Settings {
             manual_games: Vec::new(),
             auto_attach: true,
             advanced_mode: false,
+            acknowledged_warnings: BTreeMap::new(),
         }
     }
 }

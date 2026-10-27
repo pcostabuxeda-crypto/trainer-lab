@@ -25,7 +25,9 @@ type Props = { hit: ScanHit; valueType: ValueType; onClose: () => void; onSaved:
 /** Editor per desar una troballa de l'escàner com a truc nou. */
 export function SaveCheatDialog({ hit, valueType, onClose, onSaved }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => ref.current?.showModal(), []);
+  useEffect(() => {
+    ref.current?.showModal();
+  }, []);
 
   const current = hit.value ?? hit.previous;
   const [name, setName] = useState("");

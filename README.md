@@ -45,7 +45,9 @@ A la capçalera de l'app sortirà «Detectat Trainer Lab · joc de prova» amb u
 
 1. **Biblioteca → Juga** al joc que vulguis (s'obre amb Steam, Epic o directament).
 2. Al cap de 5 segons de veure'l obert, l'app **s'hi connecta sola** i et porta a **Trucs**.
-   Si hi ha un anti-cheat en marxa al sistema (p. ex. Vanguard), et demanarà confirmació.
+   Si hi ha un anti-cheat en marxa al sistema (p. ex. Vanguard), et demanarà confirmació
+   **un sol cop per joc**. Ho pots oblidar a **Configuració → Avisos d'anti-cheat acceptats**.
+   Si l'anti-cheat és **dins** del joc, mai s'hi connecta.
 3. Activa els trucs amb un clic o amb les tecles (F1, F2…).
 4. Si el joc encara no té trucs: **Crea trucs** obre un assistent pas a pas.
 

@@ -22,4 +22,9 @@ autoAttach: boolean,
 /**
  * Mostra adreces, eines de depuració i l'escàner tècnic
  */
-advancedMode: boolean, };
+advancedMode: boolean, 
+/**
+ * Avisos d'anti-cheat del sistema que l'usuari ja ha acceptat, per joc:
+ * ruta de l'exe (en minúscules) → avisos. Si n'apareix un de nou, es torna a preguntar.
+ */
+acknowledgedWarnings: { [key in string]?: Array<string> }, };

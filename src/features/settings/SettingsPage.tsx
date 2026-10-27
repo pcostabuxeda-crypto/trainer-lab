@@ -27,6 +27,15 @@ export function SettingsPage() {
   };
 
   const live = settings;
+  const acknowledged = Object.entries(settings?.acknowledgedWarnings ?? {});
+  /** `null` = tots els jocs */
+  const forget = async (path: string | null) => {
+    const next = { ...(settings?.acknowledgedWarnings ?? {}) };
+    if (path === null) for (const k of Object.keys(next)) delete next[k];
+    else delete next[path];
+    const err = await update({ acknowledgedWarnings: next });
+    setMsg(err ? { ok: false, text: err } : { ok: true, text: "Fet: et tornarem a preguntar." });
+  };
   const overrides = Object.entries(settings?.hotkeyOverrides ?? {}).flatMap(([trainer, keys]) =>
     Object.entries(keys ?? {}).map(([key, accel]) => ({ trainer, key, accel })),
   );
@@ -79,6 +88,27 @@ export function SettingsPage() {
         <p className="text-xs text-muted">
           Més baix = el valor congelat és més estable, però consumeix més CPU. 100 ms va bé per a la majoria de jocs.
         </p>
+        {acknowledged.length > 0 && (
+          <div>
+            <h3 className="mb-1 text-sm font-semibold">Avisos d'anti-cheat acceptats</h3>
+            <p className="mb-2 text-xs text-muted">
+              En aquests jocs ja vas confirmar que juges offline: l'app s'hi connecta sense tornar-ho a preguntar.
+            </p>
+            <ul className="flex flex-col gap-1 text-sm">
+              {acknowledged.map(([path, warnings]) => (
+                <li key={path} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate" title={path}>
+                    {path.split("\\").pop()} <span className="text-xs text-muted">· {(warnings ?? []).join(", ")}</span>
+                  </span>
+                  <Button onClick={() => void forget(path)}>Oblida</Button>
+                </li>
+              ))}
+            </ul>
+            <Button className="mt-2" onClick={() => void forget(null)}>
+              Oblida-ho tot
+            </Button>
+          </div>
+        )}
         {overrides.length > 0 && (
           <div>
             <h3 className="mb-1 text-sm font-semibold">Dreceres personalitzades</h3>

@@ -184,7 +184,7 @@ reescriure'l contínuament ([`Freezer`](../src-tauri/src/memory/freeze.rs)):
 | Situació | Resultat |
 |---|---|
 | Mòdul d'anti-cheat **dins del joc** (EasyAntiCheat, BEClient…) | **Bloquejat** |
-| Anti-cheat en marxa **al sistema** (Vanguard, BEService…) | **Avís**: cal confirmar |
+| Anti-cheat en marxa **al sistema** (Vanguard, BEService…) | **Avís**: cal confirmar (es recorda per joc) |
 
 ---
 
