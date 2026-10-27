@@ -12,7 +12,8 @@
 
 use std::ffi::c_void;
 
-use serde::Serialize;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use windows::Win32::Foundation::{CloseHandle, ERROR_BAD_LENGTH, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Diagnostics::Debug::{FlushInstructionCache, ReadProcessMemory, WriteProcessMemory};
@@ -37,7 +38,7 @@ use windows::core::PWSTR;
 use super::{Memory, ModuleInfo, Region, WriteMode, check_write};
 use crate::error::{AppError, AppResult};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Arch {
@@ -103,6 +104,8 @@ pub struct Process {
     handle: OwnedHandle,
     pub pid: u32,
     pub name: String,
+    /// Ruta completa de l'executable
+    pub path: String,
     pub arch: Arch,
 }
 
@@ -117,7 +120,7 @@ impl Process {
         let path = image_path(handle.0).unwrap_or_default();
         let name = path.rsplit('\\').next().unwrap_or_default().to_string();
         let arch = arch_of(handle.0);
-        Ok(Self { handle, pid, name, arch })
+        Ok(Self { handle, pid, name, path, arch })
     }
 
     /// Mòduls carregats (l'executable i les DLL). El primer sempre és l'executable.

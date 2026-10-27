@@ -4,6 +4,7 @@
 
 use std::fmt;
 
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ts_rs::TS;
 
@@ -50,6 +51,18 @@ impl Serialize for Offset {
     }
 }
 
+impl JsonSchema for Offset {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Offset".into()
+    }
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "Offset en decimal o hex (\"0x10\", \"-0x8\")",
+            "oneOf": [{ "type": "integer" }, { "type": "string", "pattern": "^-?(0[xX][0-9a-fA-F]+|[0-9]+)$" }]
+        })
+    }
+}
+
 impl fmt::Display for Offset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.0 < 0 { write!(f, "-{:#x}", self.0.unsigned_abs()) } else { write!(f, "{:#x}", self.0) }
@@ -58,7 +71,7 @@ impl fmt::Display for Offset {
 
 /// Instrucció x64 amb adreçament relatiu a RIP, p. ex. `48 8B 05 <disp32>` = `mov rax, [rip+disp]`.
 /// L'adreça final és: inici de la instrucció + `instrLength` + disp32 llegit a `dispOffset`.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[ts(export)]
 pub struct Rip {
@@ -66,7 +79,7 @@ pub struct Rip {
     pub instr_length: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[ts(export)]
 pub struct AobLocator {
@@ -79,7 +92,7 @@ pub struct AobLocator {
     pub rip: Option<Rip>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[ts(export)]
 pub struct Locator {
@@ -109,8 +122,15 @@ pub fn find_module<'a>(modules: &'a [ModuleInfo], name: Option<&str>) -> AppResu
 }
 
 pub fn resolve(mem: &dyn Memory, modules: &[ModuleInfo], loc: &Locator) -> AppResult<u64> {
+    let start = resolve_start(mem, modules, loc)?;
+    follow_pointers(mem, start, loc)
+}
+
+/// Només el punt de partida (mòdul + offset o AOB). És la part cara (l'escaneig AOB) i no
+/// canvia mentre el joc està obert, així que es pot guardar.
+pub fn resolve_start(mem: &dyn Memory, modules: &[ModuleInfo], loc: &Locator) -> AppResult<u64> {
     let module = find_module(modules, loc.module.as_deref())?;
-    let start = match (&loc.offset, &loc.aob) {
+    Ok(match (&loc.offset, &loc.aob) {
         (Some(off), None) => module.base.wrapping_add_signed(off.0),
         (None, Some(a)) => {
             let pattern: aob::Pattern = a.pattern.parse()?;
@@ -130,7 +150,12 @@ pub fn resolve(mem: &dyn Memory, modules: &[ModuleInfo], loc: &Locator) -> AppRe
             base.wrapping_add_signed(a.offset.0)
         }
         _ => return Err(AppError::InvalidValue("l'adreça necessita exactament un de: `offset` o `aob`".into())),
-    };
+    })
+}
+
+/// La cadena de punters a partir de `start`. Es torna a recórrer a cada ús, perquè els
+/// punters canvien quan el joc carrega una partida nova.
+pub fn follow_pointers(mem: &dyn Memory, start: u64, loc: &Locator) -> AppResult<u64> {
     let offsets: Vec<i64> = loc.pointers.iter().map(|o| o.0).collect();
     pointer::resolve(mem, start, &offsets)
 }

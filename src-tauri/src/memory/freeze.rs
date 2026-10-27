@@ -10,13 +10,15 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use super::{Memory, WriteMode};
+use super::{Memory, WriteMode, pointer};
 
 /// Després de tants errors seguits deixem de congelar aquell valor (l'adreça ja no és vàlida).
 const MAX_FAILURES: u32 = 20;
 
 struct Frozen {
     address: u64,
+    /// Si n'hi ha, l'adreça es recalcula a cada cicle: (punt de partida, offsets)
+    chain: Option<(u64, Vec<i64>)>,
     bytes: Vec<u8>,
     failures: u32,
 }
@@ -41,7 +43,15 @@ impl Freezer {
                 while !stop.load(Ordering::Relaxed) {
                     std::thread::sleep(Duration::from_millis(interval.load(Ordering::Relaxed)));
                     let mut map = entries.lock().unwrap_or_else(|e| e.into_inner());
-                    map.retain(|key, f| match mem.write_bytes(f.address, &f.bytes, WriteMode::Data) {
+                    map.retain(|key, f| {
+                        if let Some((start, offsets)) = &f.chain {
+                            match pointer::resolve(mem.as_ref(), *start, offsets) {
+                                Ok(a) => f.address = a,
+                                // P. ex. al menú principal el jugador encara no existeix: s'espera
+                                Err(_) => return true,
+                            }
+                        }
+                        match mem.write_bytes(f.address, &f.bytes, WriteMode::Data) {
                         Ok(()) => {
                             f.failures = 0;
                             true
@@ -53,6 +63,7 @@ impl Freezer {
                             }
                             f.failures < MAX_FAILURES
                         }
+                        }
                     });
                 }
             }
@@ -63,7 +74,13 @@ impl Freezer {
     /// Congela (o actualitza) un valor. La primera escriptura la fa qui crida, per poder
     /// retornar l'error a la UI de seguida.
     pub fn set(&self, key: &str, address: u64, bytes: Vec<u8>) {
-        self.lock().insert(key.to_string(), Frozen { address, bytes, failures: 0 });
+        self.lock().insert(key.to_string(), Frozen { address, chain: None, bytes, failures: 0 });
+    }
+
+    /// Com [`set`](Self::set), però recorrent la cadena de punters a cada cicle: si el joc
+    /// mou l'objecte (carrega una partida), la congelació el segueix.
+    pub fn set_chain(&self, key: &str, start: u64, offsets: Vec<i64>, address: u64, bytes: Vec<u8>) {
+        self.lock().insert(key.to_string(), Frozen { address, chain: Some((start, offsets)), bytes, failures: 0 });
     }
 
     pub fn remove(&self, key: &str) -> bool {

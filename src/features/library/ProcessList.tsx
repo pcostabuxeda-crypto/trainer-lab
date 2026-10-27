@@ -3,12 +3,18 @@ import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { useProcesses } from "../../stores/processes";
 import { useSession } from "../../stores/session";
+import { useTrainers } from "../../stores/trainers";
 
 export function ProcessList() {
   const { list, loading, error, refresh } = useProcesses();
   const { info, busy, error: attachError, attach } = useSession();
   const [query, setQuery] = useState("");
   const [showSystem, setShowSystem] = useState(false);
+  const catalog = useTrainers((s) => s.catalog);
+  const withTrainer = useMemo(
+    () => new Set(catalog?.trainers.map((t) => t.executable.toLowerCase()) ?? []),
+    [catalog],
+  );
 
   useEffect(() => {
     void refresh();
@@ -68,11 +74,11 @@ export function ProcessList() {
           </thead>
           <tbody>
             {visible.map((p) => {
-              const isTestGame = p.name.toLowerCase() === "test-game.exe";
+              const hasTrainer = withTrainer.has(p.name.toLowerCase());
               return (
-                <tr key={p.pid} className={`border-t border-line/60 ${isTestGame ? "bg-accent/5" : "hover:bg-panel-2"}`}>
+                <tr key={p.pid} className={`border-t border-line/60 ${hasTrainer ? "bg-accent/5" : "hover:bg-panel-2"}`}>
                   <td className="px-3 py-1.5 font-medium">
-                    {p.name} {isTestGame && <Badge tone="accent">joc de prova</Badge>}
+                    {p.name} {hasTrainer && <Badge tone="accent">té trainer</Badge>}
                   </td>
                   <td className="px-3 py-1.5 font-mono text-muted">{p.pid}</td>
                   <td className="px-3 py-1.5">

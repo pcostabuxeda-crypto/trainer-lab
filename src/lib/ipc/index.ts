@@ -11,9 +11,34 @@ import type { ProcessInfo } from "./types/ProcessInfo";
 import type { SessionEvent } from "./types/SessionEvent";
 import type { SessionInfo } from "./types/SessionInfo";
 import type { ValueType } from "./types/ValueType";
+import type { CatalogView } from "./types/CatalogView";
+import type { CheatInput } from "./types/CheatInput";
+import type { CheatState } from "./types/CheatState";
+import type { HotkeyFired } from "./types/HotkeyFired";
+import type { Settings } from "./types/Settings";
+import type { TrainerView } from "./types/TrainerView";
 
 export type { Arch } from "./types/Arch";
-export type { ErrorPayload, Locator, LogEntry, LogLevel, MemoryReading, ProcessInfo, SessionEvent, SessionInfo, ValueType };
+export type { CheatDef } from "./types/CheatDef";
+export type { CheatView } from "./types/CheatView";
+export type { VersionStatus } from "./types/VersionStatus";
+export type {
+  CatalogView,
+  CheatInput,
+  CheatState,
+  ErrorPayload,
+  HotkeyFired,
+  Locator,
+  LogEntry,
+  LogLevel,
+  MemoryReading,
+  ProcessInfo,
+  SessionEvent,
+  SessionInfo,
+  Settings,
+  TrainerView,
+  ValueType,
+};
 
 export const listProcesses = () => invoke<ProcessInfo[]>("list_processes");
 
@@ -30,6 +55,22 @@ export const detach = () => invoke<boolean>("detach");
 export const sessionInfo = () => invoke<SessionInfo | null>("session_info");
 export const onSessionState = (cb: (e: SessionEvent) => void): Promise<UnlistenFn> =>
   listen<SessionEvent>("session-state", (ev) => cb(ev.payload));
+
+// --- Trainers ---
+export const listTrainers = () => invoke<CatalogView>("list_trainers");
+export const reloadTrainers = () => invoke<CatalogView>("reload_trainers");
+export const onTrainersChanged = (cb: () => void): Promise<UnlistenFn> => listen("trainers-changed", () => cb());
+export const trainerView = () => invoke<TrainerView | null>("trainer_view");
+export const cheatStates = () => invoke<CheatState[]>("cheat_states");
+export const setCheat = (cheatId: string, input: CheatInput) => invoke<CheatState>("set_cheat", { cheatId, input });
+/** `accelerator`: "" desactiva la drecera, `null` torna a la de la definició. */
+export const setHotkey = (key: string, accelerator: string | null) => invoke<void>("set_hotkey", { key, accelerator });
+export const onHotkeyFired = (cb: (e: HotkeyFired) => void): Promise<UnlistenFn> =>
+  listen<HotkeyFired>("hotkey-fired", (ev) => cb(ev.payload));
+
+// --- Configuració ---
+export const getSettings = () => invoke<Settings>("get_settings");
+export const saveSettings = (value: Settings) => invoke<void>("save_settings", { value });
 
 // --- Depuració de memòria (Fase 2) ---
 export const debugRead = (locator: Locator, valueType: ValueType) =>

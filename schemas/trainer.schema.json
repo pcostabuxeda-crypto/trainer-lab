@@ -1,0 +1,489 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TrainerDef",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "Ruta a l'esquema, per a l'autocompletat de l'editor",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cheats": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CheatDef"
+      }
+    },
+    "id": {
+      "description": "Identificador únic: minúscules, xifres i guions",
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "online": {
+      "description": "Si és `true`, Trainer Lab es nega a adjuntar-se (joc en línia)",
+      "type": "boolean",
+      "default": false
+    },
+    "process": {
+      "$ref": "#/$defs/ProcessMatch"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "versions": {
+      "description": "Versions provades. Si no n'hi ha cap, la versió surt com a «sense informació»",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/GameVersion"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "process",
+    "cheats"
+  ],
+  "$defs": {
+    "AobLocator": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "description": "Es suma a la coincidència (o al resultat de `rip`)",
+          "$ref": "#/$defs/Offset",
+          "default": "0x0"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "rip": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rip"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pattern"
+      ]
+    },
+    "Arch": {
+      "type": "string",
+      "enum": [
+        "x64",
+        "x86",
+        "arm64",
+        "unknown"
+      ]
+    },
+    "ButtonAction": {
+      "description": "Acció d'un botó. Exactament un de `add` o `set`.",
+      "type": "object",
+      "properties": {
+        "add": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "set": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CheatDef": {
+      "description": "Un truc. Els camps vàlids depenen de `kind` (vegeu [`validate`]).",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "button",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ButtonAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default": {
+          "description": "slider, value: valor inicial a la UI",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "freeze": {
+          "description": "slider: congelar el valor triat",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "hotkey": {
+          "description": "Drecera global per defecte (toggle, button), p. ex. `\"F1\"` o `\"Ctrl+Shift+H\"`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hotkeys": {
+          "description": "slider: dreceres per pujar i baixar un `step`",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SliderHotkeys"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/CheatKind"
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "min": {
+          "description": "slider (obligatori), value (opcional)",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "name": {
+          "type": "string"
+        },
+        "off": {
+          "description": "toggle",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToggleOff"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "on": {
+          "description": "toggle",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToggleOn"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "step": {
+          "description": "slider",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "target"
+      ]
+    },
+    "CheatKind": {
+      "oneOf": [
+        {
+          "description": "Activar/desactivar: congela un valor, l'escriu un cop o aplica un patch",
+          "type": "string",
+          "const": "toggle"
+        },
+        {
+          "description": "Valor triat dins d'un rang",
+          "type": "string",
+          "const": "slider"
+        },
+        {
+          "description": "Camp numèric + «Aplica»",
+          "type": "string",
+          "const": "value"
+        },
+        {
+          "description": "Acció puntual (sumar o fixar)",
+          "type": "string",
+          "const": "button"
+        }
+      ]
+    },
+    "GameVersion": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 de l'executable, en hex",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "sha256"
+      ]
+    },
+    "Locator": {
+      "type": "object",
+      "properties": {
+        "aob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AobLocator"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "module": {
+          "description": "Nom del mòdul (`game.exe`, `engine.dll`). Si falta, l'executable principal.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Offset"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pointers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Offset"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Offset": {
+      "description": "Offset en decimal o hex (\"0x10\", \"-0x8\")",
+      "oneOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string",
+          "pattern": "^-?(0[xX][0-9a-fA-F]+|[0-9]+)$"
+        }
+      ]
+    },
+    "ProcessMatch": {
+      "type": "object",
+      "properties": {
+        "arch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Arch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "executable": {
+          "description": "Nom de l'executable, p. ex. `game.exe` (sense distingir majúscules)",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "executable"
+      ]
+    },
+    "Rip": {
+      "description": "Instrucció x64 amb adreçament relatiu a RIP, p. ex. `48 8B 05 <disp32>` = `mov rax, [rip+disp]`.\nL'adreça final és: inici de la instrucció + `instrLength` + disp32 llegit a `dispOffset`.",
+      "type": "object",
+      "properties": {
+        "dispOffset": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "instrLength": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "dispOffset",
+        "instrLength"
+      ]
+    },
+    "SliderHotkeys": {
+      "type": "object",
+      "properties": {
+        "decrease": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "increase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Target": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/Locator"
+        },
+        "type": {
+          "$ref": "#/$defs/ValueType"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "type"
+      ]
+    },
+    "ToggleOff": {
+      "oneOf": [
+        {
+          "description": "Torna a posar el valor (o els bytes) que hi havia en activar-lo",
+          "type": "string",
+          "const": "restore"
+        },
+        {
+          "description": "Només deixa de congelar; no toca la memòria",
+          "type": "string",
+          "const": "none"
+        }
+      ]
+    },
+    "ToggleOn": {
+      "description": "Què fa un toggle en activar-se. Exactament un de `freeze`, `write` o `patch`.",
+      "type": "object",
+      "properties": {
+        "expect": {
+          "description": "Bytes que hi ha d'haver abans d'aplicar el patch. Si no coincideixen, no s'escriu res",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "freeze": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "patch": {
+          "description": "Bytes hex que substitueixen el codi, p. ex. `\"90 90 90\"`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "write": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueType": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "i8",
+            "i16",
+            "i32",
+            "i64",
+            "u8",
+            "u16",
+            "u32",
+            "u64",
+            "f32",
+            "f64"
+          ]
+        },
+        {
+          "description": "1 byte: 0 = fals, qualsevol altre valor = cert",
+          "type": "string",
+          "const": "bool"
+        },
+        {
+          "description": "Seqüència de bytes en cru (només per a patches de codi)",
+          "type": "string",
+          "const": "bytes"
+        }
+      ]
+    }
+  }
+}
