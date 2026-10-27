@@ -278,7 +278,13 @@ el codi i les constants no canvien, i la memòria *mapejada* —fitxers, memòri
 GPU— se salta com fa Cheat Engine per defecte) en blocs de 4 MB i compara cada posició **alineada** a la mida del tipus
 (4 bytes per a `i32`/`f32`). Els compiladors alineen les variables, així que n'hi ha prou i és
 molt més ràpid. Els enters es comparen com a bytes (una comparació de memòria) i els decimals es
-converteixen directament. Es guarden com a molt 2 milions de resultats (16 bytes cadascun).
+converteixen directament. Es guarden com a molt 2 milions de resultats.
+
+L'assistent fa una cerca automàtica de `i32`, `i64`, `f32` i `f64` (només els tipus que
+poden representar el valor). Comparteix la lectura de cada bloc entre els tipus i desa
+el tipus de cada candidat. Les cerques següents, la prova i el truc desat conserven
+aquest tipus. El mode avançat continua cercant només el tipus seleccionat. Els blocs
+se solapen 4 bytes per no perdre valors de 8 bytes alineats a 4 que travessen el límit.
 
 **Sense bloquejar l'app.** Una cerca en un joc gran pot trigar uns segons. Es fa sense tenir
 la sessió bloquejada: la congelació, les dreceres i la UI continuen funcionant. A més, totes les
@@ -287,7 +293,9 @@ finestra i, si haguessin d'esperar, Windows la marcaria com a «No respon».
 
 **Cerques següents.** Només es rellegeixen les adreces que queden. Les que són a prop
 (menys de 64 KB) es llegeixen juntes en un sol `ReadProcessMemory`, que és el que costa. Si un
-bloc creua una zona no llegible, es llegeixen una per una.
+bloc creua una zona no llegible, es llegeixen una per una. Es compten i es registren les
+lectures fallides; si fallen totes, es conserva la cerca anterior i es permet reintentar.
+La UI diferencia aquest error d'una cerca sense coincidències i mostra els resultats truncats.
 
 | Condició | Es queda si… |
 |---|---|

@@ -262,11 +262,11 @@ pub async fn save_settings(state: State<'_, SessionState>, settings: State<'_, S
 // --- Escàner (Fase 5) ---
 
 fn summary(s: &scanner::ScanState, started: std::time::Instant) -> ScanSummary {
-    ScanSummary { count: s.count(), truncated: s.truncated, scans: s.scans, elapsed_ms: started.elapsed().as_millis() as u64 }
+    ScanSummary { count: s.count(), truncated: s.truncated, scans: s.scans, elapsed_ms: started.elapsed().as_millis() as u64, read_failures: s.read_failures }
 }
 
 #[tauri::command]
-pub async fn scan_first(state: State<'_, SessionState>, value_type: ValueType, value: f64) -> AppResult<ScanSummary> {
+pub async fn scan_first(state: State<'_, SessionState>, value_type: ValueType, value: f64, automatic: Option<bool>) -> AppResult<ScanSummary> {
     if !value_type.is_numeric() {
         return Err(AppError::InvalidValue("l'escàner només busca valors numèrics".into()));
     }
@@ -275,9 +275,11 @@ pub async fn scan_first(state: State<'_, SessionState>, value_type: ValueType, v
     // (trucs, dreceres, congelació) continuï funcionant mentrestant
     let process = state.with(|s| Ok(s.process.clone()))?;
     let started = std::time::Instant::now();
-    let scan = scanner::first_scan(process.as_ref(), value_type, value);
+    let automatic = automatic.unwrap_or(false);
+    let scan = if automatic { scanner::first_scan_auto(process.as_ref(), value) }
+        else { scanner::first_scan(process.as_ref(), value_type, value) };
     let sum = summary(&scan, started);
-    tracing::info!(count = sum.count, ms = sum.elapsed_ms, value, ty = ?value_type, "primera cerca");
+    tracing::info!(count = sum.count, ms = sum.elapsed_ms, value, automatic, ty = ?value_type, "primera cerca");
     store_scan(&state, process.pid, scan)?;
     Ok(sum)
 }
@@ -301,10 +303,11 @@ pub async fn scan_next(state: State<'_, SessionState>, filter: ScanFilter) -> Ap
         Ok((s.process.clone(), scan.ok_or_else(|| AppError::InvalidValue("primer fes una primera cerca".into()))?))
     })?;
     let started = std::time::Instant::now();
-    scan.next_scan(process.as_ref(), filter);
+    let result = scan.next_scan(process.as_ref(), filter);
     let sum = summary(&scan, started);
-    tracing::info!(count = sum.count, ms = sum.elapsed_ms, filter = ?filter, "cerca següent");
+    tracing::info!(count = sum.count, ms = sum.elapsed_ms, read_failures = sum.read_failures, filter = ?filter, "cerca següent");
     store_scan(&state, process.pid, scan)?;
+    result?;
     Ok(sum)
 }
 

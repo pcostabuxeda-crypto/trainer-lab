@@ -4,4 +4,8 @@ export type ScanSummary = { count: number,
 /**
  * Hi havia més resultats dels que es poden guardar: cal refinar
  */
-truncated: boolean, scans: number, elapsedMs: number, };
+truncated: boolean, scans: number, elapsedMs: number, 
+/**
+ * Candidats que no s'han pogut rellegir a l'última cerca següent.
+ */
+readFailures: number, };

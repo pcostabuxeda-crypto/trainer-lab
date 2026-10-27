@@ -94,6 +94,7 @@ export const removeManualGame = (path: string) => invoke<GameEntry[]>("remove_ma
 
 // --- Escàner i editor ---
 export const scanFirst = (valueType: ValueType, value: number) => invoke<ScanSummary>("scan_first", { valueType, value });
+export const scanFirstAuto = (value: number) => invoke<ScanSummary>("scan_first", { valueType: "f64", value, automatic: true });
 export const scanNext = (filter: ScanFilter) => invoke<ScanSummary>("scan_next", { filter });
 export const scanResults = (offset: number, limit: number) => invoke<ScanHit[]>("scan_results", { offset, limit });
 export const scanReset = () => invoke<void>("scan_reset");

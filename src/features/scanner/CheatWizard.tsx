@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/Button";
 import * as ipc from "../../lib/ipc";
-import type { CheatDef, Locator, ScanHit, ValueType } from "../../lib/ipc";
+import type { CheatDef, Locator, ScanHit, ScanSummary } from "../../lib/ipc";
 import { slug, uniqueId } from "../../lib/slug";
 import { useSession } from "../../stores/session";
 
@@ -15,7 +15,9 @@ type Step =
   | { id: "what" }
   | { id: "first" }
   | { id: "refine"; count: number }
-  | { id: "verify"; candidates: ScanHit[]; index: number; tested: boolean }
+  // `kept`: després d'escriure, el valor s'ha mantingut a la memòria (si no, el joc l'ha
+  // recalculat i aquella adreça és una còpia). `now`: el valor rellegit.
+  | { id: "verify"; candidates: ScanHit[]; index: number; tested: boolean; kept?: boolean; now?: number | null }
   | { id: "how"; hit: ScanHit; locator: Locator | null }
   | { id: "done"; text: string };
 
@@ -24,22 +26,23 @@ type Mode = "freeze" | "value" | "add";
 const PRESETS = ["Vida", "Munició", "Diners", "Energia", "Experiència"];
 /** Amb tan pocs candidats, ja els provem un per un. */
 const FEW = 5;
+
+/** Valor de la pantalla → valor a la memòria (p. ex. 47,70 → 4770 si el joc guarda cèntims). */
+const toRaw = (hit: ScanHit, n: number) => (hit.scale === 1 ? n : Math.round(n * hit.scale));
 const FREE_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"];
 
 export function CheatWizard({ onDone }: { onDone: () => void }) {
   const { info } = useSession();
   const [step, setStep] = useState<Step>({ id: "what" });
   const [name, setName] = useState("");
-  const [decimals, setDecimals] = useState(false);
   const [value, setValue] = useState("");
   const [testValue, setTestValue] = useState("999");
   const [mode, setMode] = useState<Mode>("freeze");
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [existing, setExisting] = useState<ipc.TrainerView | null>(null);
-
-  const type: ValueType = decimals ? "f32" : "i32";
 
   // Trucs que ja té el joc: per no repetir ids ni dreceres
   useEffect(() => {
@@ -72,12 +75,15 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
   };
 
   /** Després de cada cerca: si en queden pocs, passem a provar-los. */
-  const afterScan = async (count: number) => {
+  const afterScan = async (summary: ScanSummary) => {
+    const { count, readFailures, truncated } = summary;
+    setWarning([
+      truncated ? "Hi havia més coincidències de les que podem guardar. Si no trobem el valor, torna a començar quan tinguis una quantitat menys habitual (evita 0 o 1)." : "",
+      readFailures ? `No s'han pogut rellegir ${readFailures} candidats; el joc pot haver mogut o alliberat aquestes dades.` : "",
+    ].filter(Boolean).join(" ") || null);
     if (count === 0) {
       setError(
-        decimals
-          ? "No l'hem trobat. Torna a començar i comprova el valor."
-          : "No l'hem trobat. Si el valor del joc té decimals (o és una barra), torna a començar i marca «Té decimals».",
+        "Cap candidat coincideix amb el valor. Les coincidències inicials no confirmaven que fossin les dades que buscàvem. Comprova que el número no estigui abreujat (K, M…) i torna a començar. El joc també pot guardar-lo en una altra escala o haver-lo mogut.",
       );
       setStep({ id: "refine", count: 0 });
     } else if (count <= FEW) {
@@ -93,19 +99,20 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
     run(async () => {
       const n = parse(value);
       if (n === null) throw new Error("Escriu el número que veus al joc.");
-      const s = await ipc.scanFirst(type, n);
-      await afterScan(s.count);
+      const s = await ipc.scanFirstAuto(n);
+      await afterScan(s);
     });
 
   const refine = (filter: ipc.ScanFilter) =>
     run(async () => {
       const s = await ipc.scanNext(filter);
-      await afterScan(s.count);
+      await afterScan(s);
     });
 
   const restart = async () => {
     await ipc.scanReset().catch(() => {});
     setError(null);
+    setWarning(null);
     setValue("");
     setStep({ id: "first" });
   };
@@ -121,19 +128,20 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
         const [best] = await ipc.findPointers(hit.address);
         if (best) locator = { module: best.module, offset: best.moduleOffset, pointers: [best.pointerOffset] };
       }
-      setAmount(decimals ? "1" : "100");
+      setAmount(hit.valueType.startsWith("f") ? "1" : "100");
       setStep({ id: "how", hit, locator });
     });
 
   const save = (hit: ScanHit, locator: Locator | null) =>
     run(async () => {
+      const type = hit.valueType;
       const n = mode === "add" ? parse(amount) : parse(value) ?? hit.value ?? hit.previous;
       if (n === null) throw new Error("Escriu un número.");
       if (!locator) {
         // Sense camí estable: només per a aquesta partida
         if (mode === "add") throw new Error("Sense un camí estable, només es pot congelar o fixar el valor per a aquesta partida.");
-        if (mode === "freeze") await ipc.freezeAddress(hit.address, type, n);
-        else await ipc.scanWrite(hit.address, type, n);
+        if (mode === "freeze") await ipc.freezeAddress(hit.address, type, toRaw(hit, n));
+        else await ipc.scanWrite(hit.address, type, toRaw(hit, n));
         setStep({ id: "done", text: "Fet! Funcionarà fins que tanquis el joc." });
         return;
       }
@@ -146,10 +154,10 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
       const base = { id, name: cheatName, target: { address: locator, type }, hotkey };
       const cheat: CheatDef =
         mode === "freeze"
-          ? { ...base, kind: "toggle", on: { freeze: n }, off: "restore" }
+          ? { ...base, kind: "toggle", on: { freeze: toRaw(hit, n) }, off: "restore" }
           : mode === "add"
-            ? { ...base, kind: "button", action: { add: n } }
-            : { ...base, kind: "value", default: n };
+            ? { ...base, kind: "button", action: { add: toRaw(hit, n) } }
+            : { ...base, kind: "value", default: toRaw(hit, n) };
       await ipc.saveCheat(cheat);
       await ipc.scanReset().catch(() => {});
       setStep({ id: "done", text: `Desat! «${cheatName}»${hotkey ? ` amb la tecla ${hotkey}` : ""}. Funcionarà també quan tornis a obrir el joc.` });
@@ -192,10 +200,7 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
             placeholder="O escriu-ho: Pocions, Fusta…"
             className="rounded-lg border border-line bg-panel-2 px-3 py-2 text-sm outline-none focus:border-accent"
           />
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={decimals} onChange={(e) => setDecimals(e.target.checked)} />
-            Té decimals o és una barra (p. ex. 75,5 o una barra de vida sense número)
-          </label>
+          <p className="text-sm text-muted">Buscarem automàticament números enters i amb decimals. Necessitem un valor numèric visible al joc.</p>
           <Next disabled={!name.trim()} onClick={() => setStep({ id: "first" })}>
             Comença
           </Next>
@@ -243,9 +248,10 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
 
       {step.id === "verify" && (() => {
         const hit = step.candidates[step.index];
+        const type = hit.valueType;
         const next = async () => {
           // No era aquest: tornem a posar el valor que tenia i provem el següent
-          if (step.tested) await ipc.scanWrite(hit.address, type, hit.value ?? hit.previous).catch(() => {});
+          if (step.tested) await ipc.scanWrite(hit.address, type, toRaw(hit, hit.value ?? hit.previous)).catch(() => {});
           if (step.index + 1 < step.candidates.length) setStep({ ...step, index: step.index + 1, tested: false });
           else {
             setError("Cap dels candidats era el bo. Torna a començar.");
@@ -266,26 +272,44 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
                   void run(async () => {
                     const n = parse(testValue);
                     if (n === null) throw new Error("Escriu un número.");
-                    await ipc.scanWrite(hit.address, type, n);
-                    setStep({ ...step, tested: true });
+                    await ipc.scanWrite(hit.address, type, toRaw(hit, n));
+                    // Esperem una mica i rellegim: si el joc ho ha tornat a canviar, aquesta
+                    // adreça no és la bona (és una còpia que el joc recalcula cada moment)
+                    await new Promise((r) => setTimeout(r, 1200));
+                    const now = (await ipc.scanResults(0, FEW)).find((h) => h.address === hit.address)?.value ?? null;
+                    const kept = now !== null && Math.abs(now - n) < 0.01;
+                    setStep({ ...step, tested: true, kept, now });
                   })
                 }
               >
                 Prova
               </Button>
             </div>
-            {step.tested && (
+            {step.tested && !step.kept && (
+              <>
+                <p className="text-sm text-warn">
+                  {step.now === null
+                    ? "No hem pogut tornar a llegir aquesta adreça: el joc l'ha alliberada."
+                    : `El joc l'ha tornat a posar a ${step.now} al cap d'un segon: és una còpia que el joc recalcula, no la que guarda ${thing}.`}
+                </p>
+                <Button variant="primary" className="self-start" disabled={busy} onClick={() => void next()}>
+                  {step.index + 1 < step.candidates.length ? "Prova el següent" : "D'acord"}
+                </Button>
+              </>
+            )}
+            {step.tested && step.kept && (
               <>
                 <p className="text-sm">
-                  Al joc ara tens <strong>{testValue}</strong> de {thing}? (Pot ser que hagis de fer alguna cosa perquè la
-                  pantalla s'actualitzi.)
+                  La memòria ja té <strong>{testValue}</strong>. Mira el joc: si encara mostra el número d'abans, fes alguna
+                  cosa que el canviï (ven, compra, guanya o perd una mica) i mira si salta a prop de {testValue}.{" "}
+                  <span className="text-muted">Molts jocs no tornen a pintar el número fins que canvia per una altra raó.</span>
                 </p>
                 <div className="flex gap-2">
                   <Button variant="primary" disabled={busy} onClick={() => void accept(hit)}>
-                    Sí, és aquest
+                    Sí, ha canviat
                   </Button>
                   <Button disabled={busy} onClick={() => void next()}>
-                    No
+                    No ha canviat
                   </Button>
                 </div>
               </>
@@ -296,6 +320,12 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
 
       {step.id === "how" && (
         <Card title="Trobat! Com vols el truc?">
+          {step.hit.scale !== 1 && (
+            <p className="text-sm text-muted">
+              Aquest joc guarda {thing} en cèntims. Escriu els números com al joc (p. ex. 999,50); a la pantalla de trucs
+              el valor actual es veurà multiplicat per {step.hit.scale}.
+            </p>
+          )}
           {step.locator ? (
             <p className="text-sm text-ok">Funcionarà també quan tornis a obrir el joc.</p>
           ) : (
@@ -349,6 +379,8 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
         </Card>
       )}
 
+      {warning && <p role="status" className="rounded-xl border border-warn/40 p-4 text-sm text-warn">{warning}</p>}
+
       {error && (
         <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-bad/40 bg-bad/5 p-4 text-sm text-bad">
           {error}
@@ -357,7 +389,7 @@ export function CheatWizard({ onDone }: { onDone: () => void }) {
       )}
 
       {step.id !== "what" && step.id !== "done" && (
-        <button onClick={() => void restart().then(() => setStep({ id: "what" }))} className="self-start text-xs text-muted hover:text-ink">
+        <button disabled={busy} onClick={() => void restart().then(() => setStep({ id: "what" }))} className="self-start text-xs text-muted hover:text-ink disabled:opacity-50">
           Cancel·la i comença de nou
         </button>
       )}

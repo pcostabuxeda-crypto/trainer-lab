@@ -147,8 +147,8 @@ fn scanner_finds_health_and_its_static_pointer() {
     assert!(scan.count() > 1, "hi ha més d'un 100 a la memòria");
     // 2. Rep mal (85) i refina: «exacte 85» i després «no ha canviat»
     status_line(&mut game, &mut out, "d");
-    scan.next_scan(&p, ScanFilter::Exact { value: 85.0 });
-    scan.next_scan(&p, ScanFilter::Unchanged);
+    scan.next_scan(&p, ScanFilter::Exact { value: 85.0 }).unwrap();
+    scan.next_scan(&p, ScanFilter::Unchanged).unwrap();
     let hits = scan.page(&p, &modules, 0, 50);
     assert!(hits.iter().any(|h| h.address == format!("{health:#x}")), "la vida és entre els resultats: {hits:?}");
     let h = hits.iter().find(|h| h.address == format!("{health:#x}")).unwrap();
@@ -163,6 +163,24 @@ fn scanner_finds_health_and_its_static_pointer() {
     writeln!(game.0.stdin.as_mut().unwrap(), "q").unwrap();
 }
 
+#[test]
+fn automatic_scanner_finds_money_with_its_integer_type() {
+    use trainer_lab_lib::memory::scanner::{ScanFilter, first_scan_auto};
+    use trainer_lab_lib::memory::value::ValueType;
+
+    let (mut game, mut out) = start_game();
+    let p = Process::open(game.0.id()).unwrap();
+    let modules = p.modules().unwrap();
+    let money = locator::resolve(&p, &modules, &health_locator("0x8")).unwrap();
+    let mut scan = first_scan_auto(&p, 500.0);
+    status_line(&mut game, &mut out, "b");
+    scan.next_scan(&p, ScanFilter::Exact { value: 380.0 }).unwrap();
+    let hits = scan.page(&p, &modules, 0, scan.count());
+    assert!(hits.iter().any(|h| h.address == format!("{money:#x}")
+        && h.value_type == ValueType::I64 && h.value == Some(380.0)));
+    writeln!(game.0.stdin.as_mut().unwrap(), "q").unwrap();
+}
+
 /// Mesura de velocitat de la primera cerca contra un procés real (només lectura):
 /// `BENCH_PID=1234 cargo test -p trainer-lab --test test_game scan_benchmark -- --ignored --nocapture`
 #[test]
@@ -172,7 +190,10 @@ fn scan_benchmark() {
     use trainer_lab_lib::memory::value::ValueType;
     let pid: u32 = std::env::var("BENCH_PID").expect("cal BENCH_PID").parse().unwrap();
     let p = Process::open(pid).unwrap();
-    for (ty, v) in [(ValueType::F32, 6.71), (ValueType::I32, 100.0)] {
+    // BENCH_VALUE (opcional): valor a buscar com a f32/f64 i, multiplicat per 100, com a i32/i64
+    let v: f64 = std::env::var("BENCH_VALUE").ok().and_then(|x| x.parse().ok()).unwrap_or(6.71);
+    let cents = (v * 100.0).round();
+    for (ty, v) in [(ValueType::F32, v), (ValueType::F64, v), (ValueType::I32, cents), (ValueType::I64, cents)] {
         let t = std::time::Instant::now();
         let s = first_scan(&p, ty, v);
         println!("{ty:?} {v}: {} resultats en {:?}", s.count(), t.elapsed());

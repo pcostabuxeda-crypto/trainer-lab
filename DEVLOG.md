@@ -1,5 +1,44 @@
 # DEVLOG
 
+## Correcció de la cerca següent de diners (27/10/2026)
+
+**Diagnòstic**
+- Als logs de Moon Sweepers, `f32` 6,71 trobava 14.008 candidats però refinar a 6,86
+  en deixava zero. Les coincidències inicials no demostraven que fossin els diners.
+- L'assistent forçava `i32` o `f32` segons «Té decimals». No cercava `f64`/`i64`,
+  encara que el backend ja els admetia. El format real de Moon Sweepers no s'ha confirmat.
+- Les lectures fallides es descartaven sense diagnòstic.
+
+**Canvis**
+- L'assistent cerca automàticament `i32`, `i64`, `f32` i `f64`, compartint la lectura
+  dels blocs. Cada candidat conserva el tipus per refinar, provar, restaurar i desar el truc.
+- Solapament de 4 bytes entre blocs per no perdre valors de 8 bytes que en travessen el límit.
+- Les cerques següents compten les lectures fallides i les registren. Si fallen totes,
+  conserven els candidats anteriors i permeten reintentar amb un missatge específic.
+- L'assistent informa de cerques truncades i de zero coincidències. Ja no demana a
+  l'usuari que dedueixi el format de memòria a partir de si el número té decimals.
+- Es bloqueja cancel·lar durant una cerca i repetir-la amb Enter en mode avançat mentre treballa.
+
+**Verificat**
+- 109 tests unitaris OK (1 ignorat), incloent reproducció `6,71 → 6,86` amb diners `f64`,
+  tipus mixtos, límits de blocs i recuperació de lectures fallides.
+- 4 tests d'integració OK (benchmark ignorat), incloent diners `i64` del joc de prova
+  cercats automàticament i refinats després de comprar.
+- `npm run build` OK; `cargo clippy -p trainer-lab --lib --tests` sense avisos de codi.
+- Els logs nous de Moon Sweepers mostren una cerca automàtica de 8,79 amb 2.047 candidats;
+  «Ha pujat» en conserva 1, sense errors de lectura, i la prova escriu 999 sense error.
+  Això confirma que la cerca següent ja avança en aquesta sessió; falta la confirmació
+  visual de l'usuari que el candidat correspon als diners.
+- `cargo test --workspace` no ha pogut substituir l'executable perquè l'app estava oberta;
+  els tests d'integració s'han executat directament des del binari de tests acabat de compilar.
+  Els tests unitaris han necessitat una carpeta temporal dins del workspace pel sandbox.
+- La comprovació estricta de Clippy de tot el workspace detecta un avís preexistent de
+  documentació (`doc_lazy_continuation`) a `test-game/src/main.rs`.
+
+**Pendent de validar amb el joc de l'usuari**
+- Confirmar que el candidat de Moon Sweepers modifica els diners al joc. La cerca automàtica no converteix
+  escales (cèntims, K/M) ni segueix dades que el joc trasllada entre cerques.
+
 ## Fase 0A — Anàlisi de referència (27/10/2026)
 
 - WeMod s'ha rebatejat com a **Wand** i s'instal·la a `%LOCALAPPDATA%\Wand`.
@@ -231,3 +270,22 @@ bloqueig, i Windows marcava la finestra com a «No respon».
 
 **Mesura** (test ignorat `scan_benchmark`, Moon Sweepers, només lectura): `f32` 6,71 de
 ~40 s → **4,3 s**; `i32` 100 → 5,0 s. 105 tests unitaris + 3 d'integració, clippy net.
+
+### Moon Sweepers: el truc creat no canviava els diners (27/10/2026)
+
+**Diagnòstic** (captura del joc + cerques de només lectura)
+- El joc mostra «47.70 $». La cerca automàtica de Codex arribava a 1 candidat, però escriure-hi
+  999 no canviava la pantalla; en respondre «No», l'assistent restaurava el valor i el truc es perdia.
+- Cerca a 47,70: 41 `f32`, 35 `f64`, 542 `i32` = 4770, 8 `i64` = 4770. Els cèntims són una
+  possibilitat real que l'assistent no buscava mai.
+
+**Canvis**
+- **Relectura al pas «Prova»**: després d'escriure, s'espera 1,2 s i es torna a llegir. Si el joc
+  ho ha canviat, és una còpia que el joc recalcula i es passa sola al següent candidat. Si s'ha
+  mantingut, s'avisa que el joc potser no refresca el número fins que canvia per una altra raó.
+- **Cèntims**: si el número té decimals, la cerca automàtica també busca `i32`/`i64` × 100. Cada
+  candidat porta `scale`; les cerques següents comparen en unitats de la pantalla i l'assistent
+  escriu `valor × scale`. A la mateixa adreça es prova primer el tipus més petit.
+
+**Verificat**: 110 tests unitaris + 4 d'integració, clippy net, typecheck i build.
+**Pendent**: provar-ho a Moon Sweepers amb l'usuari (cal canviar els diners jugant).

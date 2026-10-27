@@ -56,7 +56,8 @@ queden amagades. Les pots veure activant **Configuració → Mode avançat**.
 
 ## Crear un truc amb l'assistent
 
-1. Tria què vols modificar (Vida, Munició, Diners… o escriu-ho) i si té decimals.
+1. Tria què vols modificar (Vida, Munició, Diners… o escriu-ho). L'assistent busca
+   automàticament enters i decimals de 32 i 64 bits.
 2. Escriu el número que veus al joc.
 3. Fes que canviï jugant i escriu el número nou (o digues si ha pujat o baixat). Es repeteix
    fins que queden pocs candidats.
