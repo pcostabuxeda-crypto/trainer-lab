@@ -199,3 +199,39 @@ fn scan_benchmark() {
         println!("{ty:?} {v}: {} resultats en {:?}", s.count(), t.elapsed());
     }
 }
+
+/// Llista (només lectura) els decimals d'un procés que valen entre BENCH_MIN i BENCH_MAX:
+/// `BENCH_PID=1 BENCH_MIN=47.705 BENCH_MAX=47.71 cargo test ... scan_dump -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn scan_dump() {
+    use trainer_lab_lib::memory::scanner::first_scan;
+    use trainer_lab_lib::memory::value::ValueType;
+    let env = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("cal {k}"));
+    let p = Process::open(env("BENCH_PID").parse().unwrap()).unwrap();
+    let (min, max): (f64, f64) = (env("BENCH_MIN").parse().unwrap(), env("BENCH_MAX").parse().unwrap());
+    for ty in [ValueType::F32, ValueType::F64] {
+        let s = first_scan(&p, ty, (min + max) / 2.0);
+        for h in s.page(&p, &p.modules().unwrap(), 0, s.count()) {
+            if h.value.is_some_and(|v| v >= min && v < max) {
+                println!("{ty:?} {} {:?} {:?}", h.address, h.value, h.module_offset);
+            }
+        }
+    }
+}
+
+/// Llista (només lectura) totes les adreces d'un tipus amb un valor exacte:
+/// `BENCH_PID=1 BENCH_TYPE=i64 BENCH_VALUE=47707 cargo test ... scan_list -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn scan_list() {
+    use trainer_lab_lib::memory::scanner::first_scan;
+    use trainer_lab_lib::memory::value::ValueType;
+    let env = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("cal {k}"));
+    let p = Process::open(env("BENCH_PID").parse().unwrap()).unwrap();
+    let ty: ValueType = serde_json::from_str(&format!("\"{}\"", env("BENCH_TYPE"))).unwrap();
+    let s = first_scan(&p, ty, env("BENCH_VALUE").parse().unwrap());
+    for h in s.page(&p, &p.modules().unwrap(), 0, 50) {
+        println!("{ty:?} {} {:?} {:?}", h.address, h.value, h.module_offset);
+    }
+}

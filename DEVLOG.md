@@ -289,3 +289,21 @@ bloqueig, i Windows marcava la finestra com a «No respon».
 
 **Verificat**: 110 tests unitaris + 4 d'integració, clippy net, typecheck i build.
 **Pendent**: provar-ho a Moon Sweepers amb l'usuari (cal canviar els diners jugant).
+
+### Prova a Moon Sweepers feta per Claude (27/10/2026)
+
+**Mètode**: assistent i escàner avançat de l'app + captures del joc. El menú Construir fa
+d'oracle («Te faltan $X» = 250 − diners reals). Cada valor de prova s'ha restaurat.
+
+**Resultats**
+- Diners reals ≈ 47,707 (el HUD els retalla a 47.70; el menú diu que falten 202,29).
+- 8 `f64` en clar ≈ 47,7074 → escriure-hi 999 (tots alhora) **no** canvia el menú.
+- Cap `f32` ≈ 47,7074. Enters: cap amb ×100 (que seria 4770; el menú ho descarta), ×10.000 ni
+  ×100.000; un `i64` = 47707 (×1000) en adreça no alineada: tampoc canvia el menú.
+- `global-metadata.dat` (IL2CPP): `shownMoney`, `shadowMoney`, `MoneyChanged`,
+  `LocalBuildMoney`… i el joc té «Tu tripulación» (cooperatiu). Els diners no són en clar:
+  els protegeix el mateix joc (còpia ombra / sincronització).
+
+**Decisió**: no s'intenta saltar aquesta protecció (requisit del projecte: cap bypass
+d'anti-cheat). L'assistent funciona; és aquest joc el que no ho permet per als diners.
+Els tests ignorats `scan_dump` i `scan_list` queden com a eines de diagnòstic.
