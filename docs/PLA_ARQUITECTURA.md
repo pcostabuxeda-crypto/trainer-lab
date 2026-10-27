@@ -162,7 +162,7 @@ de l'usuari. L'escàner sempre escriu a la carpeta d'usuari.
   "name": "Trainer Lab Test Game",
   "online": false,                      // true ⇒ l'app es nega a adjuntar-se
   "process": { "executable": "test-game.exe", "arch": "x64" },
-  "match": { "steamAppId": null, "epicAppName": null, "gogId": null },
+  "match": { "steamAppId": 620, "epicAppName": "...", "gogId": "..." },   // opcional
   "versions": [
     { "label": "dev", "sha256": "…", "fileVersion": null }
   ],

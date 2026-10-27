@@ -20,6 +20,17 @@
       "description": "Identificador únic: minúscules, xifres i guions",
       "type": "string"
     },
+    "match": {
+      "description": "Identificadors del joc a les botigues, per reconèixer-lo a la Biblioteca",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StoreIds"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "name": {
       "type": "string"
     },
@@ -387,6 +398,32 @@
             "string",
             "null"
           ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "StoreIds": {
+      "type": "object",
+      "properties": {
+        "epicAppName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gogId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "steamAppId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
         }
       },
       "additionalProperties": false

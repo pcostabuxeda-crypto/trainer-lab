@@ -6,6 +6,7 @@ use tauri::{AppHandle, State};
 use ts_rs::TS;
 
 use crate::error::{AppError, AppResult};
+use crate::games::{GameEntry, GameStore, RunningGame};
 use crate::hotkeys;
 use crate::logging::{self, LogEntry, LogLevel};
 use crate::memory::locator::{self, Locator};
@@ -13,7 +14,7 @@ use crate::memory::process::{self, ProcessInfo};
 use crate::memory::value::ValueType;
 use crate::memory::{Memory, WriteMode};
 use crate::session::{Session, SessionInfo, SessionState};
-use crate::settings::{Settings, SettingsStore};
+use crate::settings::{ManualGame, Settings, SettingsStore};
 use crate::trainers::engine::{CheatInput, CheatState, VersionInfo};
 use crate::trainers::model::{CheatDef, CheatKind, valid_hotkey};
 use crate::trainers::{CatalogView, TrainerStore};
@@ -60,9 +61,60 @@ pub fn list_trainers(store: State<'_, TrainerStore>) -> CatalogView {
 }
 
 #[tauri::command]
-pub fn reload_trainers(store: State<'_, TrainerStore>) -> CatalogView {
+pub fn reload_trainers(store: State<'_, TrainerStore>, games: State<'_, GameStore>) -> CatalogView {
     store.reload();
+    games.rematch(&store.catalog.read().unwrap_or_else(|e| e.into_inner()));
     store.view()
+}
+
+// --- Biblioteca ---
+
+/// Jocs instal·lats. La primera crida (o amb `refresh`) escaneja les botigues.
+#[tauri::command]
+pub async fn list_games(app: AppHandle, games: State<'_, GameStore>, refresh: Option<bool>) -> AppResult<Vec<GameEntry>> {
+    Ok(games.installed(&app, refresh.unwrap_or(false)))
+}
+
+#[tauri::command]
+pub fn running_games(games: State<'_, GameStore>) -> Vec<RunningGame> {
+    games.running()
+}
+
+/// Obre el selector de fitxers i afegeix l'executable triat com a joc manual.
+#[tauri::command]
+pub async fn add_manual_game(
+    app: AppHandle,
+    settings: State<'_, SettingsStore>,
+    games: State<'_, GameStore>,
+) -> AppResult<Option<Vec<GameEntry>>> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = app.dialog().file().set_title("Tria l'executable del joc").add_filter("Executable", &["exe"]).blocking_pick_file();
+    let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    if !path.is_file() || !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe")) {
+        return Err(AppError::InvalidValue("cal triar un fitxer .exe".into()));
+    }
+    let path_str = path.display().to_string();
+    let mut s = settings.get();
+    if !s.manual_games.iter().any(|g| g.path.eq_ignore_ascii_case(&path_str)) {
+        let name = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        s.manual_games.push(ManualGame { name, path: path_str.clone() });
+        settings.save(s)?;
+        tracing::info!(path = %path_str, "joc afegit a mà");
+    }
+    Ok(Some(games.installed(&app, true)))
+}
+
+#[tauri::command]
+pub async fn remove_manual_game(
+    app: AppHandle,
+    settings: State<'_, SettingsStore>,
+    games: State<'_, GameStore>,
+    path: String,
+) -> AppResult<Vec<GameEntry>> {
+    let mut s = settings.get();
+    s.manual_games.retain(|g| !g.path.eq_ignore_ascii_case(&path));
+    settings.save(s)?;
+    Ok(games.installed(&app, true))
 }
 
 #[derive(Debug, Serialize, TS)]

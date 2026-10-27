@@ -4,6 +4,7 @@ compile_error!("Trainer Lab només funciona a Windows (fa servir l'API Win32 per
 pub mod anticheat;
 mod commands;
 pub mod error;
+pub mod games;
 mod hotkeys;
 mod logging;
 pub mod memory;
@@ -28,6 +29,7 @@ fn bundled_trainers_dir(app: &tauri::App) -> PathBuf {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(hotkeys::on_shortcut)
@@ -35,6 +37,7 @@ pub fn run() {
         )
         .manage(session::SessionState::default())
         .manage(hotkeys::HotkeyMap::default())
+        .manage(games::GameStore::default())
         .setup(|app| {
             let log_dir = app.path().app_log_dir()?;
             std::fs::create_dir_all(&log_dir)?;
@@ -45,6 +48,8 @@ pub fn run() {
             app.manage(settings::SettingsStore::load(data_dir.join("settings.json")));
             app.manage(trainers::TrainerStore::new(bundled_trainers_dir(app), data_dir.join("trainers")));
             trainers::watch(app.handle().clone());
+            // Escaneja la biblioteca en segon pla i comença a vigilar els jocs en marxa
+            games::watch_running(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -55,6 +60,10 @@ pub fn run() {
             commands::session_info,
             commands::list_trainers,
             commands::reload_trainers,
+            commands::list_games,
+            commands::running_games,
+            commands::add_manual_game,
+            commands::remove_manual_game,
             commands::trainer_view,
             commands::cheat_states,
             commands::set_cheat,

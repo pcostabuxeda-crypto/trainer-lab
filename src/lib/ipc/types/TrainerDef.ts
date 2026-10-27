@@ -2,6 +2,7 @@
 import type { CheatDef } from "./CheatDef";
 import type { GameVersion } from "./GameVersion";
 import type { ProcessMatch } from "./ProcessMatch";
+import type { StoreIds } from "./StoreIds";
 
 export type TrainerDef = { schemaVersion: number, 
 /**
@@ -12,6 +13,10 @@ id: string, name: string,
  * Si és `true`, Trainer Lab es nega a adjuntar-se (joc en línia)
  */
 online: boolean, process: ProcessMatch, 
+/**
+ * Identificadors del joc a les botigues, per reconèixer-lo a la Biblioteca
+ */
+match?: StoreIds, 
 /**
  * Versions provades. Si no n'hi ha cap, la versió surt com a «sense informació»
  */

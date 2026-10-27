@@ -117,3 +117,29 @@
 - Les dreceres globals amb un joc real a primer pla: l'eina de control de pantalla no
   reconeix l'exe de `tauri dev`. El registre i el handler compilen i tenen test de la lògica
   de prioritats.
+
+## Fase 4 — Biblioteca: Steam, Epic, GOG i jocs en execució (27/10/2026)
+
+**Fet**
+- `games/vdf.rs`: parser propi del format KeyValues de Valve (cometes, escapes, blocs, comentaris).
+- `games/registry.rs`: lectura del registre (`RegGetValueW`, `RegEnumKeyExW`), només lectura.
+- `games/steam.rs`, `epic.rs`, `gog.rs`: proveïdors per botiga. Steam llegeix totes les
+  biblioteques i descarta les instal·lacions incompletes i els paquets que no són jocs; Epic
+  descarta complements i instal·lacions a mig fer.
+- Jocs manuals (`Afegeix .exe`, amb el selector de fitxers de `tauri-plugin-dialog`), desats a
+  `settings.json`.
+- Coincidència joc ↔ definició: camp nou `match` (`steamAppId`, `epicAppName`, `gogId`), exe
+  principal o cerca de l'exe a la carpeta del joc. Es refà quan canvien les definicions.
+- Fil que detecta els jocs en marxa cada 2 s i emet `running-games`.
+- UI: graella de jocs (botiga, trainer, en marxa, Adjunta), jocs en marxa sense botiga, filtre
+  «només amb trainer», cerca, i «Detectat … Adjunta» a la capçalera. La llista de tots els
+  processos queda plegada per als casos especials.
+
+**Verificat**
+- `cargo test --workspace`: 91 tests unitaris + 2 d'integració; clippy sense avisos.
+- Escaneig real d'aquest PC (test ignorat `scans_this_pc`): 15 jocs de Steam + 3 d'Epic en ~5 ms.
+  A l'app, amb la cerca d'executables, 18 jocs en 345 ms i el joc de prova detectat en marxa.
+- Biblioteca revisada al navegador amb dades simulades.
+
+**Notes**
+- GOG no està instal·lat en aquest PC: el proveïdor no s'ha provat amb dades reals.

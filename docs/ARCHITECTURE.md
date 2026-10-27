@@ -247,3 +247,26 @@ aquell cicle sense comptar-lo com a error.
 - Drecera efectiva = la de l'usuari (`settings.json`) o, si no n'hi ha, la de la definició. Una
   drecera buida la desactiva.
 - Si un altre programa ja fa servir la combinació, el registre falla i la UI ho mostra al truc.
+
+## 11. Biblioteca de jocs ([`games/`](../src-tauri/src/games/mod.rs))
+
+| Botiga | D'on surt la informació |
+|---|---|
+| Steam | `HKCU\Software\Valve\Steam\SteamPath` → `steamapps\libraryfolders.vdf` (totes les biblioteques) → `appmanifest_<id>.acf` (nom, carpeta, `StateFlags`; bit 4 = instal·lat) |
+| Epic | `%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item` (JSON amb carpeta i executable) |
+| GOG | `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\<id>` (`gameName`, `path`, `exe`) |
+| Manual | `settings.json` → `manualGames` |
+
+Els fitxers `.vdf`/`.acf` de Valve fan servir el format **KeyValues**. Trainer Lab porta un
+parser mínim propi ([`vdf.rs`](../src-tauri/src/games/vdf.rs)), sense dependències.
+
+**Quina definició té cada joc**, en aquest ordre:
+1. el camp `match` de la definició (id de Steam/Epic/GOG);
+2. l'executable principal que diu la botiga;
+3. buscant `process.executable` dins la carpeta del joc (màx. 4 nivells i 4.000 entrades, perquè
+   un joc enorme no bloquegi l'escaneig).
+
+**Jocs en execució:** un fil llista els processos cada 2 s. Un procés és un joc si té
+definició (pel nom de l'exe) o si s'executa des de la carpeta d'un joc instal·lat. Els
+ajudants (crash handlers, desinstal·ladors…) s'ignoren. Si la llista canvia, s'emet
+`running-games`.
