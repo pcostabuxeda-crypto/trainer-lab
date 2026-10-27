@@ -4,8 +4,8 @@ Aplicació d'escriptori per a Windows per crear i fer servir **trainers** (trucs
 **single-player o offline**. Els trucs es defineixen en fitxers JSON. L'app llegeix i
 escriu la memòria del joc **des de fora**, sense injectar codi.
 
-> **Estat:** Fase 1 de 5. Ara mateix hi ha l'esquelet de l'app, el joc de prova i el
-> llistat de processos. Vegeu [DEVLOG.md](DEVLOG.md) i el
+> **Estat:** Fase 2 de 5. Ja es pot adjuntar a un joc i llegir, escriure i congelar valors des del
+> panell de depuració. Vegeu [DEVLOG.md](DEVLOG.md), [com funciona](docs/ARCHITECTURE.md) i el
 > [pla d'arquitectura](docs/PLA_ARQUITECTURA.md).
 
 ## Límits que l'app respecta
@@ -58,7 +58,7 @@ A la pantalla **Biblioteca** de l'app hauria de sortir `test-game.exe` marcat co
 src/                 Frontend React + TypeScript + Tailwind + Zustand
   app/               Layout i navegació
   components/ui/     Components reutilitzables
-  features/          library · settings (trainer i scanner, en fases següents)
+  features/          library · trainer · settings (scanner a la Fase 5)
   lib/ipc/           Crides tipades a Rust (types/ el genera ts-rs)
   stores/            Estat global (Zustand)
 src-tauri/           Backend Rust (Tauri 2)
@@ -79,7 +79,8 @@ Arriba a la **Fase 3**, quan el format de definició estigui implementat. El for
 
 ## Limitacions conegudes
 
-- Encara no es pot adjuntar a cap procés ni llegir-ne la memòria (Fase 2).
+- Encara no hi ha trucs definits per JSON ni hotkeys (Fase 3): de moment es fa servir el panell de depuració.
+- Només es pot adjuntar a un joc alhora.
 - Els processos protegits del sistema surten sense ruta ni arquitectura: és normal,
   Windows no deixa consultar-los sense privilegis.
 
