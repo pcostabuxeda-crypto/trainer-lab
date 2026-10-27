@@ -62,6 +62,8 @@ pub fn run() {
             commands::reload_trainers,
             commands::list_games,
             commands::running_games,
+            commands::launch_game,
+            commands::freeze_address,
             commands::add_manual_game,
             commands::remove_manual_game,
             commands::trainer_view,

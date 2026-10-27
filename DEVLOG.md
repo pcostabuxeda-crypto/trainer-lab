@@ -172,3 +172,32 @@
 **No verificat**
 - «Desa com a truc» de punta a punta a l'app real (la recàrrega de la sessió no té test
   automàtic; l'escriptura i la validació sí).
+
+## Mode fàcil (27/10/2026)
+
+Objectiu: que fer servir i crear trucs sigui tan senzill com en les apps comercials, amb
+un disseny propi.
+
+**Fet**
+- **Juga** a la Biblioteca: obre el joc per la seva botiga (`steam://rungameid/…`,
+  `com.epicgames.launcher://…`) o executant-lo (GOG i manuals). Només jocs que l'app ha
+  trobat, mai una ruta enviada per la UI.
+- **Connexió automàtica**: 5 s després de veure obert un joc amb trucs, l'app s'hi connecta.
+  Un sol intent per procés: si et desconnectes, no s'hi torna a connectar. Si cal confirmar un
+  avís d'anti-cheat, no ho fa sola: ho deixa a la capçalera («Connecta»).
+- **Mode avançat** (Configuració, desactivat per defecte): adreces, PID, eines de depuració,
+  escàner tècnic i llista de processos. Sense, la UI només mostra jocs i trucs.
+- **Assistent «Crea trucs»**: què → valor → canvia'l → prova cada candidat (i restaura els que
+  no són) → com el vols. Busca sol el punter estàtic, tria la primera tecla F lliure i desa
+  la definició. Si no hi ha camí estable, aplica un **truc temporal** (`freeze_address`) que
+  dura fins que tanques el joc.
+- Textos més planers: «Connecta», «Desconnecta», «té trucs», «Trucs», «Crea trucs».
+
+**Verificat**
+- `cargo test --workspace`: 104 tests unitaris + 3 d'integració; clippy sense avisos.
+- Connexió automàtica a l'app real: ha detectat el joc de prova i, com que Vanguard és en
+  marxa, s'ha esperat a la confirmació (comportament previst).
+- Assistent de punta a punta al navegador amb el backend simulat.
+
+**No verificat**
+- «Juga» obrint de debò un joc de Steam o Epic.

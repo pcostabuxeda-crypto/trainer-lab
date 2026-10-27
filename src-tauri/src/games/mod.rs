@@ -7,16 +7,18 @@ pub mod registry;
 mod steam;
 mod vdf;
 
-use std::collections::HashSet;
-use std::path::Path;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::RwLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use ts_rs::TS;
 
+use crate::error::{AppError, AppResult};
 use crate::memory::process::{self, ProcessInfo};
+use crate::session::SessionState;
 use crate::settings::SettingsStore;
 use crate::trainers::{Catalog, TrainerStore};
 
@@ -185,6 +187,63 @@ pub fn find_running(processes: &[ProcessInfo], games: &[GameEntry], catalog: &Ca
     out
 }
 
+/// Com s'obre un joc: per la botiga (així funcionen el DRM i les actualitzacions) o
+/// executant-lo directament.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Launch {
+    Url(String),
+    Exe { path: PathBuf, dir: PathBuf },
+}
+
+pub fn launch_target(g: &GameEntry) -> AppResult<Launch> {
+    let encode = |s: &str| -> String {
+        s.bytes()
+            .map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") })
+            .collect()
+    };
+    Ok(match g.store {
+        Store::Steam => Launch::Url(format!("steam://rungameid/{}", g.store_id)),
+        Store::Epic => Launch::Url(format!("com.epicgames.launcher://apps/{}?action=launch&silent=true", encode(&g.store_id))),
+        Store::Gog | Store::Manual => {
+            let exe = g.exe.as_ref().ok_or_else(|| AppError::InvalidValue(format!("no sé quin executable obre «{}»", g.name)))?;
+            Launch::Exe { path: PathBuf::from(exe), dir: PathBuf::from(&g.install_dir) }
+        }
+    })
+}
+
+pub fn launch(g: &GameEntry) -> AppResult<()> {
+    let os = |e: std::io::Error| AppError::Os(e.to_string());
+    match launch_target(g)? {
+        // L'explorador obre els enllaços steam:// i com.epicgames.launcher:// amb la seva app
+        Launch::Url(url) => std::process::Command::new("explorer.exe").arg(&url).spawn().map(drop).map_err(os)?,
+        Launch::Exe { path, dir } => std::process::Command::new(&path).current_dir(&dir).spawn().map(drop).map_err(os)?,
+    }
+    tracing::info!(game = %g.name, "joc obert des de la Biblioteca");
+    Ok(())
+}
+
+/// Temps que esperem des que veiem el joc fins a adjuntar-nos-hi, perquè acabi de carregar.
+const AUTO_ATTACH_DELAY: Duration = Duration::from_secs(5);
+
+/// Quin joc cal adjuntar automàticament ara: el primer amb trainer que fa prou estona que
+/// corre i al qual encara no ho hem intentat. Mai si ja n'hi ha un d'adjuntat.
+pub fn pick_auto_attach<'a>(
+    running: &'a [RunningGame],
+    first_seen: &HashMap<u32, Instant>,
+    attempted: &HashSet<u32>,
+    attached: bool,
+    now: Instant,
+) -> Option<&'a RunningGame> {
+    if attached {
+        return None;
+    }
+    running.iter().find(|r| {
+        r.trainer_id.is_some()
+            && !attempted.contains(&r.pid)
+            && first_seen.get(&r.pid).is_some_and(|t| now.duration_since(*t) >= AUTO_ATTACH_DELAY)
+    })
+}
+
 /// Estat compartit: jocs instal·lats (en memòria cau) i jocs en execució.
 #[derive(Default)]
 pub struct GameStore {
@@ -223,6 +282,9 @@ pub fn watch_running(app: AppHandle) {
     let _ = std::thread::Builder::new().name("running-games".into()).spawn(move || {
         let store = app.state::<GameStore>();
         let games = store.installed(&app, false);
+        let mut first_seen: HashMap<u32, Instant> = HashMap::new();
+        // Una sola prova per procés: si l'usuari es desadjunta, no ens hi tornem a adjuntar
+        let mut attempted: HashSet<u32> = HashSet::new();
         loop {
             if let Ok(procs) = process::list_processes() {
                 let installed = store.installed.read().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_else(|| games.clone());
@@ -232,7 +294,23 @@ pub fn watch_running(app: AppHandle) {
                 if changed {
                     tracing::debug!(count = now.len(), "jocs en execució");
                     *store.running.write().unwrap_or_else(|e| e.into_inner()) = now.clone();
-                    let _ = app.emit("running-games", now);
+                    let _ = app.emit("running-games", now.clone());
+                }
+
+                let t = Instant::now();
+                first_seen.retain(|pid, _| now.iter().any(|r| r.pid == *pid));
+                for r in &now {
+                    first_seen.entry(r.pid).or_insert(t);
+                }
+                let session = app.state::<SessionState>();
+                let auto = app.state::<SettingsStore>().get().auto_attach;
+                if auto && let Some(r) = pick_auto_attach(&now, &first_seen, &attempted, session.info().is_some(), t) {
+                    attempted.insert(r.pid);
+                    match session.attach(&app, r.pid, false) {
+                        Ok(_) => tracing::info!(game = %r.name, "adjuntat automàticament"),
+                        // P. ex. avís d'anti-cheat: cal que l'usuari ho confirmi des de la UI
+                        Err(e) => tracing::info!(game = %r.name, "no s'ha adjuntat automàticament: {e}"),
+                    }
                 }
             }
             std::thread::sleep(Duration::from_secs(2));
@@ -322,6 +400,46 @@ mod tests {
         }
         println!("{} jocs en {:?}", all.len(), started.elapsed());
         assert!(!all.is_empty());
+    }
+
+    #[test]
+    fn launch_targets_per_store() {
+        let dir = Path::new(r"C:\Jocs\X");
+        assert_eq!(
+            launch_target(&GameEntry::new(Store::Steam, "620", "P2", dir, None)).unwrap(),
+            Launch::Url("steam://rungameid/620".into())
+        );
+        assert_eq!(
+            launch_target(&GameEntry::new(Store::Epic, "Fn:App 1", "E", dir, None)).unwrap(),
+            Launch::Url("com.epicgames.launcher://apps/Fn%3AApp%201?action=launch&silent=true".into())
+        );
+        let exe = Path::new(r"C:\Jocs\X\x.exe");
+        assert_eq!(
+            launch_target(&GameEntry::new(Store::Manual, "m", "M", dir, Some(exe))).unwrap(),
+            Launch::Exe { path: exe.into(), dir: dir.into() }
+        );
+        assert!(launch_target(&GameEntry::new(Store::Gog, "1", "G", dir, None)).is_err());
+    }
+
+    #[test]
+    fn auto_attach_waits_and_tries_once() {
+        let r = |pid, t: Option<&str>| RunningGame {
+            pid,
+            process_name: "x.exe".into(),
+            name: "X".into(),
+            game_id: None,
+            trainer_id: t.map(Into::into),
+        };
+        let running = [r(1, None), r(2, Some("t")), r(3, Some("t"))];
+        let t0 = Instant::now();
+        let later = t0 + AUTO_ATTACH_DELAY + Duration::from_secs(1);
+        let seen: HashMap<u32, Instant> = [(1, t0), (2, t0), (3, later)].into();
+        let mut tried = HashSet::new();
+        assert_eq!(pick_auto_attach(&running, &seen, &tried, false, t0).map(|r| r.pid), None, "massa aviat");
+        assert_eq!(pick_auto_attach(&running, &seen, &tried, false, later).map(|r| r.pid), Some(2), "sense trainer no");
+        assert_eq!(pick_auto_attach(&running, &seen, &tried, true, later).map(|r| r.pid), None, "ja adjuntat");
+        tried.insert(2);
+        assert_eq!(pick_auto_attach(&running, &seen, &tried, false, later).map(|r| r.pid), None, "el 3 encara no fa 5 s");
     }
 
     #[test]

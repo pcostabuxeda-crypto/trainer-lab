@@ -14,4 +14,12 @@ hotkeyOverrides: { [key in string]?: { [key in string]?: string } },
 /**
  * Jocs afegits a mà a la Biblioteca
  */
-manualGames: Array<ManualGame>, };
+manualGames: Array<ManualGame>, 
+/**
+ * Adjuntar-se sol quan s'obre un joc que té trainer
+ */
+autoAttach: boolean, 
+/**
+ * Mostra adreces, eines de depuració i l'escàner tècnic
+ */
+advancedMode: boolean, };

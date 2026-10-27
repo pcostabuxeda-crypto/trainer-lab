@@ -76,6 +76,17 @@ pub async fn list_games(app: AppHandle, games: State<'_, GameStore>, refresh: Op
     Ok(games.installed(&app, refresh.unwrap_or(false)))
 }
 
+/// Obre un joc de la Biblioteca (només jocs que l'app ha trobat, mai una ruta qualsevol).
+#[tauri::command]
+pub async fn launch_game(app: AppHandle, games: State<'_, GameStore>, game_id: String) -> AppResult<()> {
+    let game = games
+        .installed(&app, false)
+        .into_iter()
+        .find(|g| g.id == game_id)
+        .ok_or_else(|| AppError::InvalidValue(format!("no conec el joc «{game_id}»")))?;
+    crate::games::launch(&game)
+}
+
 #[tauri::command]
 pub fn running_games(games: State<'_, GameStore>) -> Vec<RunningGame> {
     games.running()
@@ -314,6 +325,21 @@ pub async fn scan_write(state: State<'_, SessionState>, address: String, value_t
         s.process.read_bytes(address, &mut b)?;
         tracing::info!(address = format_args!("{address:#x}"), value, "valor escrit des de l'escàner");
         Ok(MemoryReading { address: format!("{address:#x}"), value: value_type.decode(&b)? })
+    })
+}
+
+/// Truc temporal: congela una adreça només fins que es tanqui el joc (no es desa enlloc).
+/// Serveix quan una troballa és dinàmica i no hi ha cap punter estàtic.
+#[tauri::command]
+pub async fn freeze_address(state: State<'_, SessionState>, address: String, value_type: ValueType, value: f64) -> AppResult<String> {
+    let address = parse_address(&address)?;
+    let bytes = value_type.encode(value)?;
+    state.with(|s| {
+        s.process.write_bytes(address, &bytes, WriteMode::Data)?;
+        let key = format!("temp:{address:#x}:{value_type:?}");
+        s.freezer.set(&key, address, bytes);
+        tracing::info!(key, value, "truc temporal");
+        Ok(key)
     })
 }
 

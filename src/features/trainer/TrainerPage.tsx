@@ -3,7 +3,9 @@ import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import * as ipc from "../../lib/ipc";
 import type { CheatInput, TrainerView, VersionStatus } from "../../lib/ipc";
+import { useNav } from "../../stores/nav";
 import { useSession } from "../../stores/session";
+import { useAdvanced } from "../../stores/settings";
 import { CheatCard } from "./CheatCard";
 import { DebugPanel } from "./DebugPanel";
 
@@ -17,6 +19,9 @@ export function TrainerPage() {
   const { info, lastDetach, detach } = useSession();
   const [view, setView] = useState<TrainerView | null>(null);
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
+  const [temps, setTemps] = useState<string[]>([]);
+  const advanced = useAdvanced();
+  const go = useNav((s) => s.go);
   const viewRef = useRef(view);
   viewRef.current = view;
 
@@ -25,6 +30,7 @@ export function TrainerPage() {
   useEffect(() => {
     if (!info) return setView(null);
     void load();
+    ipc.listFrozen().then((k) => setTemps(k.filter((x) => x.startsWith("temp:"))), () => {});
     // Valors en directe: cada 500 ms mentre aquesta pantalla és oberta
     const timer = setInterval(() => {
       ipc.cheatStates().then(
@@ -78,7 +84,7 @@ export function TrainerPage() {
       <div className="rounded-xl border border-dashed border-line p-8 text-center">
         <h2 className="text-lg font-semibold">Cap joc adjuntat</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-          {lastDetach ? `${lastDetach}. ` : ""}Ves a la Biblioteca i prem «Adjunta» al costat del procés del joc.
+          {lastDetach ? `${lastDetach}. ` : ""}Obre un joc des de la Biblioteca amb «Juga»: quan s'obri, l'app s'hi connectarà sola.
         </p>
       </div>
     );
@@ -91,9 +97,11 @@ export function TrainerPage() {
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-line bg-panel p-4">
         <div>
           <h2 className="text-lg font-semibold">{view?.name ?? info.name}</h2>
-          <p className="font-mono text-xs text-muted">
-            {info.name} · PID {info.pid} · {info.arch}
-          </p>
+          {advanced && (
+            <p className="font-mono text-xs text-muted">
+              {info.name} · PID {info.pid} · {info.arch}
+            </p>
+          )}
         </div>
         {version && (
           <span title={view?.version.sha256 ? `SHA-256 ${view.version.sha256}` : undefined}>
@@ -104,9 +112,10 @@ export function TrainerPage() {
           </span>
         )}
         {info.warnings.length > 0 && <Badge tone="warn">avís acceptat: {info.warnings.join(", ")}</Badge>}
-        <Button className="ml-auto" onClick={() => void detach()}>
-          Desadjunta
+        <Button className="ml-auto" variant="primary" onClick={() => go("scanner")}>
+          + Crea un truc
         </Button>
+        <Button onClick={() => void detach()}>Desconnecta</Button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto pr-1">
@@ -127,18 +136,37 @@ export function TrainerPage() {
             </section>
           ))
         ) : (
-          <p className="mb-4 rounded-xl border border-dashed border-line p-4 text-sm text-muted">
-            No hi ha cap definició per a <span className="font-mono">{info.name}</span>. Crea'n una a la carpeta de
-            trainers (vegeu la Biblioteca) o fes servir les eines de depuració.
-          </p>
+          <div className="mb-4 rounded-xl border border-dashed border-line p-6 text-center">
+            <p className="text-sm text-muted">Aquest joc encara no té trucs.</p>
+            <Button className="mt-3" variant="primary" onClick={() => go("scanner")}>
+              Crea el primer truc
+            </Button>
+          </div>
         )}
 
+        {temps.length > 0 && (
+          <section className="mb-5 rounded-xl border border-warn/40 bg-panel p-4">
+            <h3 className="text-sm font-semibold">Trucs temporals</h3>
+            <p className="mb-2 text-xs text-muted">Actius fins que tanquis el joc. No es desen.</p>
+            <ul className="flex flex-col gap-1">
+              {temps.map((k) => (
+                <li key={k} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-mono text-xs text-muted">{advanced ? k : "valor congelat"}</span>
+                  <Button onClick={() => void ipc.unfreeze(k).then(() => setTemps((t) => t.filter((x) => x !== k)))}>Atura</Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {advanced && (
         <details className="mt-2 rounded-xl border border-line bg-panel" open={!view}>
           <summary className="cursor-pointer p-3 text-sm text-muted">Eines de depuració (llegir/escriure a mà)</summary>
           <div className="flex min-h-[420px] flex-col p-3 pt-0">
             <DebugPanel />
           </div>
         </details>
+        )}
       </div>
 
       {toast && (

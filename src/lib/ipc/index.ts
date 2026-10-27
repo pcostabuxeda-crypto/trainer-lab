@@ -85,6 +85,7 @@ export const onHotkeyFired = (cb: (e: HotkeyFired) => void): Promise<UnlistenFn>
 // --- Biblioteca ---
 export const listGames = (refresh = false) => invoke<GameEntry[]>("list_games", { refresh });
 export const runningGames = () => invoke<RunningGame[]>("running_games");
+export const launchGame = (gameId: string) => invoke<void>("launch_game", { gameId });
 export const onRunningGames = (cb: (g: RunningGame[]) => void): Promise<UnlistenFn> =>
   listen<RunningGame[]>("running-games", (ev) => cb(ev.payload));
 /** Obre el selector de fitxers. `null` si l'usuari cancel·la. */
@@ -98,6 +99,9 @@ export const scanResults = (offset: number, limit: number) => invoke<ScanHit[]>(
 export const scanReset = () => invoke<void>("scan_reset");
 export const scanWrite = (address: string, valueType: ValueType, value: number) =>
   invoke<MemoryReading>("scan_write", { address, valueType, value });
+/** Truc temporal (fins que es tanqui el joc). Retorna la clau per aturar-lo amb `unfreeze`. */
+export const freezeAddress = (address: string, valueType: ValueType, value: number) =>
+  invoke<string>("freeze_address", { address, valueType, value });
 export const findPointers = (address: string) => invoke<PointerCandidate[]>("find_pointers", { address });
 /** Retorna la ruta del fitxer on s'ha desat la definició. */
 export const saveCheat = (cheat: CheatDef) => invoke<string>("save_cheat", { cheat });

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/Button";
 import * as ipc from "../../lib/ipc";
 import type { CheatDef, Locator, PointerCandidate, ScanHit, ValueType } from "../../lib/ipc";
+import { slug } from "../../lib/slug";
 
 type Kind = "freeze" | "value" | "slider" | "add";
 
@@ -11,14 +12,6 @@ const KINDS: { id: Kind; label: string }[] = [
   { id: "slider", label: "Slider: valor dins d'un rang" },
   { id: "add", label: "Botó: suma una quantitat" },
 ];
-
-const slug = (s: string) =>
-  s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "") || "truc";
 
 /** Locator inicial: estàtic si l'adreça és dins d'un mòdul; si no, buit (cal un punter). */
 function initialLocator(hit: ScanHit): Locator | null {

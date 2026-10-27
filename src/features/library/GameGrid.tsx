@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import type { RunningGame, Store } from "../../lib/ipc";
+import * as ipc from "../../lib/ipc";
 import { useGames } from "../../stores/games";
+import { useNav } from "../../stores/nav";
 import { useSession } from "../../stores/session";
+import { useAdvanced } from "../../stores/settings";
 
 const STORE_LABEL: Record<Store, string> = { steam: "Steam", epic: "Epic", gog: "GOG", manual: "Manual" };
 
@@ -12,6 +15,22 @@ export function GameGrid() {
   const { info, busy, attach } = useSession();
   const [query, setQuery] = useState("");
   const [onlyTrainer, setOnlyTrainer] = useState(false);
+  const [launching, setLaunching] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+  const advanced = useAdvanced();
+  const go = useNav((s) => s.go);
+
+  const play = async (id: string) => {
+    setLaunching(id);
+    setLaunchError(null);
+    try {
+      await ipc.launchGame(id);
+    } catch (e) {
+      setLaunchError(ipc.errorMessage(e));
+    }
+    // El botó queda en «Obrint…» uns segons, fins que el detectem en marxa
+    setTimeout(() => setLaunching((l) => (l === id ? null : l)), 15000);
+  };
 
   useEffect(() => void start(), [start]);
 
@@ -58,9 +77,9 @@ export function GameGrid() {
         </div>
       </header>
 
-      {error && (
+      {(error ?? launchError) && (
         <p role="alert" className="border-b border-line bg-bad/10 p-3 text-sm text-bad">
-          {error}
+          {error ?? launchError}
         </p>
       )}
 
@@ -76,7 +95,7 @@ export function GameGrid() {
                   <Badge tone="ok">adjuntat</Badge>
                 ) : (
                   <Button variant="primary" disabled={busy} onClick={() => void attach(r.pid, r.processName)}>
-                    Adjunta
+                    Connecta
                   </Button>
                 )}
               </span>
@@ -99,12 +118,14 @@ export function GameGrid() {
                 </h3>
                 <Badge>{STORE_LABEL[g.store]}</Badge>
               </div>
-              <p className="selectable truncate font-mono text-[11px] text-muted" title={g.installDir}>
-                {g.installDir}
-              </p>
+              {advanced && (
+                <p className="selectable truncate font-mono text-[11px] text-muted" title={g.installDir}>
+                  {g.installDir}
+                </p>
+              )}
               <div className="mt-auto flex flex-wrap items-center gap-2">
-                {g.trainerId ? <Badge tone="accent">trainer</Badge> : <Badge>sense trainer</Badge>}
-                {r && <Badge tone="ok">en marxa · {r.processName}</Badge>}
+                {g.trainerId ? <Badge tone="accent">té trucs</Badge> : <Badge>sense trucs</Badge>}
+                {r && <Badge tone="ok">en marxa</Badge>}
                 {g.store === "manual" && g.exe && (
                   <button
                     onClick={() => void removeManual(g.exe!)}
@@ -113,14 +134,25 @@ export function GameGrid() {
                     Treu
                   </button>
                 )}
-                {r &&
-                  (attached ? (
-                    <Badge tone="ok">adjuntat</Badge>
-                  ) : (
-                    <Button className="ml-auto" variant="primary" disabled={busy} onClick={() => void attach(r.pid, r.processName)}>
-                      Adjunta
+                <span className="ml-auto">
+                  {attached ? (
+                    <Button variant="primary" onClick={() => go("trainer")}>
+                      Trucs
                     </Button>
-                  ))}
+                  ) : r ? (
+                    <Button variant="primary" disabled={busy} onClick={() => void attach(r.pid, r.processName)}>
+                      Connecta
+                    </Button>
+                  ) : (
+                    <Button
+                      variant={g.trainerId ? "primary" : "ghost"}
+                      disabled={launching === g.id}
+                      onClick={() => void play(g.id)}
+                    >
+                      {launching === g.id ? "Obrint…" : "Juga"}
+                    </Button>
+                  )}
+                </span>
               </div>
             </article>
           );

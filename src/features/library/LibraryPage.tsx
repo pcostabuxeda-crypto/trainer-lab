@@ -1,12 +1,15 @@
 import { GameGrid } from "./GameGrid";
+import { useAdvanced } from "../../stores/settings";
 import { ProcessList } from "./ProcessList";
 import { TrainerList } from "./TrainerList";
 
 export function LibraryPage() {
+  const advanced = useAdvanced();
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto pr-1">
       <GameGrid />
       <TrainerList />
+      {advanced && (
       <details className="rounded-xl border border-line bg-panel">
         <summary className="cursor-pointer p-3 text-sm text-muted">
           Tots els processos (per adjuntar-te a un joc que no surt a la llista)
@@ -15,6 +18,7 @@ export function LibraryPage() {
           <ProcessList />
         </div>
       </details>
+      )}
     </div>
   );
 }

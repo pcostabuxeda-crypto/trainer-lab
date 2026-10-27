@@ -1,31 +1,33 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { LibraryPage } from "../features/library/LibraryPage";
+import { CheatWizard } from "../features/scanner/CheatWizard";
 import { ScannerPage } from "../features/scanner/ScannerPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TrainerPage } from "../features/trainer/TrainerPage";
 import { useGames } from "../stores/games";
+import { type PageId, useNav } from "../stores/nav";
 import { useSession } from "../stores/session";
+import { useAdvanced } from "../stores/settings";
 
-const PAGES = [
+const PAGES: { id: PageId; label: string }[] = [
   { id: "library", label: "Biblioteca" },
-  { id: "trainer", label: "Trainer" },
-  { id: "scanner", label: "Escàner" },
+  { id: "trainer", label: "Trucs" },
+  { id: "scanner", label: "Crea trucs" },
   { id: "settings", label: "Configuració" },
-] as const;
-
-type PageId = (typeof PAGES)[number]["id"];
+];
 
 export default function App() {
-  const [page, setPage] = useState<PageId>("library");
+  const { page, go } = useNav();
+  const advanced = useAdvanced();
   const { info, busy, pending, lastDetach, attach, confirmPending, cancelPending } = useSession();
   // Joc amb trainer en marxa i encara no adjuntat: el suggerim a la capçalera
   const detected = useGames((s) => s.running.find((r) => r.trainerId));
 
-  // En adjuntar-se a un joc, anem directament a la seva pantalla
+  // En adjuntar-se a un joc, anem directament als seus trucs
   useEffect(() => {
-    if (info) setPage("trainer");
-  }, [info?.pid]);
+    if (info) go("trainer");
+  }, [info?.pid, go]);
 
   return (
     <div className="flex h-full">
@@ -39,7 +41,7 @@ export default function App() {
         {PAGES.map((p) => (
           <button
             key={p.id}
-            onClick={() => setPage(p.id)}
+            onClick={() => go(p.id)}
             aria-current={page === p.id ? "page" : undefined}
             className={`rounded-lg px-3 py-2 text-left text-sm transition ${
               page === p.id ? "bg-panel-2 text-ink shadow-[inset_2px_0_0_var(--color-accent)]" : "text-muted hover:text-ink"
@@ -56,29 +58,30 @@ export default function App() {
           <span className={`size-2 rounded-full ${info ? "bg-ok" : detected ? "bg-warn" : "bg-muted"}`} />
           {info ? (
             <span>
-              Adjuntat a <strong>{info.name}</strong> <span className="font-mono text-muted">PID {info.pid}</span>
+              Connectat a <strong>{info.trainer?.name ?? info.name}</strong>
+              {advanced && <span className="font-mono text-muted"> · PID {info.pid}</span>}
             </span>
           ) : detected ? (
             <>
               <span>
-                Detectat <strong>{detected.name}</strong> <span className="font-mono text-muted">{detected.processName}</span>
+                Joc obert: <strong>{detected.name}</strong>
               </span>
               <button
                 disabled={busy}
                 onClick={() => void attach(detected.pid, detected.processName)}
                 className="rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-ink hover:brightness-110 disabled:opacity-50"
               >
-                Adjunta
+                Connecta
               </button>
             </>
           ) : (
-            <span className="text-muted">{lastDetach ?? "Cap joc adjuntat"}</span>
+            <span className="text-muted">{lastDetach ?? "Obre un joc des de la Biblioteca"}</span>
           )}
         </header>
         <main className="min-h-0 flex-1 overflow-hidden p-5">
           {page === "library" && <LibraryPage />}
           {page === "trainer" && <TrainerPage />}
-          {page === "scanner" && <ScannerPage onSaved={() => setPage("trainer")} />}
+          {page === "scanner" && (advanced ? <ScannerPage onSaved={() => go("trainer")} /> : <CheatWizard onDone={() => go("trainer")} />)}
           {page === "settings" && <SettingsPage />}
         </main>
       </div>
@@ -87,7 +90,7 @@ export default function App() {
         <ConfirmDialog
           title="Anti-cheat en marxa al sistema"
           message={pending.message}
-          confirmLabel={`Adjunta igualment a ${pending.name}`}
+          confirmLabel={`Connecta igualment a ${pending.name}`}
           onConfirm={() => void confirmPending()}
           onCancel={cancelPending}
         />

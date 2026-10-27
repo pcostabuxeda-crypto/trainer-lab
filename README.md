@@ -41,6 +41,31 @@ npm run test-game -- --debug
 A la capçalera de l'app sortirà «Detectat Trainer Lab · joc de prova» amb un botó
 **Adjunta**.
 
+## Ús ràpid
+
+1. **Biblioteca → Juga** al joc que vulguis (s'obre amb Steam, Epic o directament).
+2. Al cap de 5 segons de veure'l obert, l'app **s'hi connecta sola** i et porta a **Trucs**.
+   Si hi ha un anti-cheat en marxa al sistema (p. ex. Vanguard), et demanarà confirmació.
+3. Activa els trucs amb un clic o amb les tecles (F1, F2…).
+4. Si el joc encara no té trucs: **Crea trucs** obre un assistent pas a pas.
+
+Les adreces de memòria, les eines de depuració, l'escàner tècnic i la llista de processos
+queden amagades. Les pots veure activant **Configuració → Mode avançat**.
+
+## Crear un truc amb l'assistent
+
+1. Tria què vols modificar (Vida, Munició, Diners… o escriu-ho) i si té decimals.
+2. Escriu el número que veus al joc.
+3. Fes que canviï jugant i escriu el número nou (o digues si ha pujat o baixat). Es repeteix
+   fins que queden pocs candidats.
+4. **Prova**: l'app hi posa un valor i et pregunta si l'has vist canviar al joc. Si no era
+   aquell, torna a posar el valor original i prova el següent.
+5. Tria com el vols: que no baixi mai, posar-hi el número que vulguis, o un botó que en sumi.
+   L'app li posa nom i la primera tecla F lliure, i el desa.
+
+Si el valor no té un camí estable (canvia de lloc cada partida i no hi ha cap variable global
+que hi apunti), el truc s'aplica **només fins que tanquis el joc** i surt a «Trucs temporals».
+
 ## La Biblioteca
 
 - Busca els jocs instal·lats a **Steam** (totes les biblioteques de `libraryfolders.vdf`),
@@ -119,9 +144,9 @@ detallat: [docs/PLA_ARQUITECTURA.md §4](docs/PLA_ARQUITECTURA.md#4-format-de-de
 Les dreceres per defecte són les del JSON. Per canviar-les, clica-hi a la pantalla Trainer i
 prem la combinació nova. **Supr** la desactiva i **↺** torna a la del fitxer.
 
-## L'escàner de memòria
+## L'escàner de memòria (mode avançat)
 
-1. Adjunta't al joc i obre **Escàner**.
+1. Activa el mode avançat, connecta't al joc i obre **Crea trucs**.
 2. Tria el tipus (`i32` serveix per a la majoria de comptadors; `f32` per a barres i
    velocitats) i escriu el valor que veus al joc. **Primera cerca**.
 3. Canvia el valor jugant (rep mal, gasta diners) i fes **Cerca següent** amb la condició que
