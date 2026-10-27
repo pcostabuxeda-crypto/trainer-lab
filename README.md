@@ -4,8 +4,8 @@ Aplicació d'escriptori per a Windows per crear i fer servir **trainers** (trucs
 **single-player o offline**. Els trucs es defineixen en fitxers JSON. L'app llegeix i
 escriu la memòria del joc **des de fora**, sense injectar codi.
 
-> **Estat:** Fase 3 de 5. Els trucs es defineixen en JSON, tenen pantalla pròpia i dreceres
-> globals. Vegeu [DEVLOG.md](DEVLOG.md), [com funciona](docs/ARCHITECTURE.md) i el
+> **Estat:** Fase 4 de 5. Detecta els jocs de Steam, Epic i GOG i quins estan en marxa; els
+> trucs es defineixen en JSON, amb pantalla pròpia i dreceres globals. Vegeu [DEVLOG.md](DEVLOG.md), [com funciona](docs/ARCHITECTURE.md) i el
 > [pla d'arquitectura](docs/PLA_ARQUITECTURA.md).
 
 ## Límits que l'app respecta
@@ -38,8 +38,18 @@ En un altre terminal, obre el joc de prova:
 npm run test-game -- --debug
 ```
 
-A la pantalla **Biblioteca** de l'app hauria de sortir `test-game.exe` marcat com a
-«joc de prova».
+A la capçalera de l'app sortirà «Detectat Trainer Lab · joc de prova» amb un botó
+**Adjunta**.
+
+## La Biblioteca
+
+- Busca els jocs instal·lats a **Steam** (totes les biblioteques de `libraryfolders.vdf`),
+  **Epic Games** (manifests de `%ProgramData%`) i **GOG Galaxy** (registre).
+- **Afegeix .exe** per als jocs que no surten (altres botigues o sense botiga).
+- Cada joc mostra si té trainer. La definició es reconeix pel camp `match` (id de Steam, Epic
+  o GOG) o, si no n'hi ha, buscant l'executable de la definició dins la carpeta del joc.
+- Cada 2 segons mira quins jocs estan en marxa. Si n'hi ha un amb trainer, el proposa a la
+  capçalera.
 
 ## Ordres útils
 
@@ -111,7 +121,9 @@ prem la combinació nova. **Supr** la desactiva i **↺** torna a la del fitxer.
 
 ## Limitacions conegudes
 
-- Encara no detecta els jocs instal·lats (Fase 4) ni té escàner de memòria (Fase 5).
+- Encara no té escàner de memòria (Fase 5).
+- Altres botigues (EA app, Ubisoft Connect, Xbox, Battle.net…) no es detecten soles:
+  afegeix-les amb **Afegeix .exe**.
 - Algunes dreceres poden no arribar a jocs que capturen el teclat a baix nivell (p. ex. en
   pantalla completa exclusiva). Si passa, prova una combinació amb Ctrl o Alt.
 - Només es pot adjuntar a un joc alhora.

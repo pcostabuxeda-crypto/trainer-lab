@@ -36,6 +36,10 @@ pub struct TrainerDef {
     #[serde(default)]
     pub online: bool,
     pub process: ProcessMatch,
+    /// Identificadors del joc a les botigues, per reconèixer-lo a la Biblioteca
+    #[serde(rename = "match", default, skip_serializing_if = "Option::is_none")]
+    #[ts(rename = "match", optional)]
+    pub store_ids: Option<StoreIds>,
     /// Versions provades. Si no n'hi ha cap, la versió surt com a «sense informació»
     #[serde(default)]
     pub versions: Vec<GameVersion>,
@@ -51,6 +55,21 @@ pub struct ProcessMatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub arch: Option<Arch>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[ts(export)]
+pub struct StoreIds {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub steam_app_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub epic_app_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub gog_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]

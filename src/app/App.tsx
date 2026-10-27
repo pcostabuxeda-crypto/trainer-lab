@@ -4,6 +4,7 @@ import { Placeholder } from "../components/ui/Placeholder";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TrainerPage } from "../features/trainer/TrainerPage";
+import { useGames } from "../stores/games";
 import { useSession } from "../stores/session";
 
 const PAGES = [
@@ -17,7 +18,9 @@ type PageId = (typeof PAGES)[number]["id"];
 
 export default function App() {
   const [page, setPage] = useState<PageId>("library");
-  const { info, pending, lastDetach, confirmPending, cancelPending } = useSession();
+  const { info, busy, pending, lastDetach, attach, confirmPending, cancelPending } = useSession();
+  // Joc amb trainer en marxa i encara no adjuntat: el suggerim a la capçalera
+  const detected = useGames((s) => s.running.find((r) => r.trainerId));
 
   // En adjuntar-se a un joc, anem directament a la seva pantalla
   useEffect(() => {
@@ -50,11 +53,24 @@ export default function App() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-5 text-sm" aria-live="polite">
-          <span className={`size-2 rounded-full ${info ? "bg-ok" : "bg-muted"}`} />
+          <span className={`size-2 rounded-full ${info ? "bg-ok" : detected ? "bg-warn" : "bg-muted"}`} />
           {info ? (
             <span>
               Adjuntat a <strong>{info.name}</strong> <span className="font-mono text-muted">PID {info.pid}</span>
             </span>
+          ) : detected ? (
+            <>
+              <span>
+                Detectat <strong>{detected.name}</strong> <span className="font-mono text-muted">{detected.processName}</span>
+              </span>
+              <button
+                disabled={busy}
+                onClick={() => void attach(detected.pid, detected.processName)}
+                className="rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-ink hover:brightness-110 disabled:opacity-50"
+              >
+                Adjunta
+              </button>
+            </>
           ) : (
             <span className="text-muted">{lastDetach ?? "Cap joc adjuntat"}</span>
           )}

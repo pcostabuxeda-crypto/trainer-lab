@@ -194,7 +194,9 @@ pub fn watch(app: AppHandle) {
                 continue;
             }
             while rx.recv_timeout(Duration::from_millis(300)).is_ok() {}
-            app.state::<TrainerStore>().reload();
+            let store = app.state::<TrainerStore>();
+            store.reload();
+            app.state::<crate::games::GameStore>().rematch(&store.catalog.read().unwrap_or_else(|e| e.into_inner()));
             let _ = app.emit("trainers-changed", ());
         }
     });

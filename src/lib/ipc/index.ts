@@ -17,12 +17,17 @@ import type { CheatState } from "./types/CheatState";
 import type { HotkeyFired } from "./types/HotkeyFired";
 import type { Settings } from "./types/Settings";
 import type { TrainerView } from "./types/TrainerView";
+import type { GameEntry } from "./types/GameEntry";
+import type { RunningGame } from "./types/RunningGame";
 
 export type { Arch } from "./types/Arch";
 export type { CheatDef } from "./types/CheatDef";
 export type { CheatView } from "./types/CheatView";
 export type { VersionStatus } from "./types/VersionStatus";
+export type { Store } from "./types/Store";
 export type {
+  GameEntry,
+  RunningGame,
   CatalogView,
   CheatInput,
   CheatState,
@@ -67,6 +72,15 @@ export const setCheat = (cheatId: string, input: CheatInput) => invoke<CheatStat
 export const setHotkey = (key: string, accelerator: string | null) => invoke<void>("set_hotkey", { key, accelerator });
 export const onHotkeyFired = (cb: (e: HotkeyFired) => void): Promise<UnlistenFn> =>
   listen<HotkeyFired>("hotkey-fired", (ev) => cb(ev.payload));
+
+// --- Biblioteca ---
+export const listGames = (refresh = false) => invoke<GameEntry[]>("list_games", { refresh });
+export const runningGames = () => invoke<RunningGame[]>("running_games");
+export const onRunningGames = (cb: (g: RunningGame[]) => void): Promise<UnlistenFn> =>
+  listen<RunningGame[]>("running-games", (ev) => cb(ev.payload));
+/** Obre el selector de fitxers. `null` si l'usuari cancel·la. */
+export const addManualGame = () => invoke<GameEntry[] | null>("add_manual_game");
+export const removeManualGame = (path: string) => invoke<GameEntry[]>("remove_manual_game", { path });
 
 // --- Configuració ---
 export const getSettings = () => invoke<Settings>("get_settings");

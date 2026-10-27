@@ -19,11 +19,22 @@ pub struct Settings {
     /// trainerId → clau → drecera. Clau = id del truc, o `id:increase` / `id:decrease` als
     /// sliders. Una drecera buida (`""`) desactiva la de la definició.
     pub hotkey_overrides: BTreeMap<String, BTreeMap<String, String>>,
+    /// Jocs afegits a mà a la Biblioteca
+    pub manual_games: Vec<ManualGame>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ManualGame {
+    pub name: String,
+    /// Ruta completa de l'executable
+    pub path: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { freeze_interval_ms: 100, hotkey_overrides: BTreeMap::new() }
+        Self { freeze_interval_ms: 100, hotkey_overrides: BTreeMap::new(), manual_games: Vec::new() }
     }
 }
 
