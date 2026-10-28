@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import logo from "../assets/logo.svg";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { CheatWizard } from "../features/scanner/CheatWizard";
@@ -33,9 +34,7 @@ export default function App() {
     <div className="flex h-full">
       <nav className="flex w-52 shrink-0 flex-col gap-1 border-r border-line bg-panel p-3" aria-label="Navegació principal">
         <div className="mb-5 flex items-center gap-2 px-2 pt-1">
-          <span className="grid size-7 place-items-center rounded-md bg-accent font-mono text-sm font-bold text-accent-ink">
-            TL
-          </span>
+          <img src={logo} alt="" className="size-7" />
           <span className="font-semibold tracking-tight">Trainer Lab</span>
         </div>
         {PAGES.map((p) => (
