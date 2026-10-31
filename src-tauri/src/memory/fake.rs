@@ -10,11 +10,12 @@ pub struct FakeMemory {
     pub data: Mutex<Vec<u8>>,
     pub ptr_size: usize,
     pub writable: bool,
+    pub mapped: bool,
 }
 
 impl FakeMemory {
     pub fn new(base: u64, size: usize, ptr_size: usize) -> Self {
-        Self { base, data: Mutex::new(vec![0; size]), ptr_size, writable: true }
+        Self { base, data: Mutex::new(vec![0; size]), ptr_size, writable: true, mapped: false }
     }
 
     pub fn put(&self, address: u64, bytes: &[u8]) {
@@ -57,6 +58,7 @@ impl Memory for FakeMemory {
             writable: self.writable,
             executable: false,
             guard: false,
+            mapped: self.mapped,
         })
     }
 }

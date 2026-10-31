@@ -3,6 +3,7 @@ import { Button } from "../../components/ui/Button";
 import { HotkeyInput } from "../../components/ui/HotkeyInput";
 import { Switch } from "../../components/ui/Switch";
 import type { CheatInput, CheatView } from "../../lib/ipc";
+import { useAdvanced } from "../../stores/settings";
 
 type Props = {
   cheat: CheatView;
@@ -14,6 +15,7 @@ const fmt = (v: number | null) => (v === null ? "—" : Number.isInteger(v) ? St
 
 export function CheatCard({ cheat, onInput, onHotkey }: Props) {
   const { def, state } = cheat;
+  const advanced = useAdvanced();
   const [draft, setDraft] = useState(String(def.default ?? def.min ?? 0));
   const [slider, setSlider] = useState<number>(def.default ?? def.min ?? 0);
 
@@ -113,7 +115,7 @@ export function CheatCard({ cheat, onInput, onHotkey }: Props) {
             </span>
           </>
         )}
-        {state.address && <span className="selectable ml-auto font-mono">{state.address}</span>}
+        {advanced && state.address && <span className="selectable ml-auto font-mono">{state.address}</span>}
       </footer>
 
       {(state.error || cheat.hotkeyError) && (

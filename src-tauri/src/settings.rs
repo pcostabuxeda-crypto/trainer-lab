@@ -21,6 +21,13 @@ pub struct Settings {
     pub hotkey_overrides: BTreeMap<String, BTreeMap<String, String>>,
     /// Jocs afegits a mà a la Biblioteca
     pub manual_games: Vec<ManualGame>,
+    /// Adjuntar-se sol quan s'obre un joc que té trainer
+    pub auto_attach: bool,
+    /// Mostra adreces, eines de depuració i l'escàner tècnic
+    pub advanced_mode: bool,
+    /// Avisos d'anti-cheat del sistema que l'usuari ja ha acceptat, per joc:
+    /// ruta de l'exe (en minúscules) → avisos. Si n'apareix un de nou, es torna a preguntar.
+    pub acknowledged_warnings: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -34,7 +41,14 @@ pub struct ManualGame {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { freeze_interval_ms: 100, hotkey_overrides: BTreeMap::new(), manual_games: Vec::new() }
+        Self {
+            freeze_interval_ms: 100,
+            hotkey_overrides: BTreeMap::new(),
+            manual_games: Vec::new(),
+            auto_attach: true,
+            advanced_mode: false,
+            acknowledged_warnings: BTreeMap::new(),
+        }
     }
 }
 

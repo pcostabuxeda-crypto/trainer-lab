@@ -6,7 +6,7 @@ import type { ScanFilter, ScanHit, ScanSummary, ValueType } from "../../lib/ipc"
 import { useSession } from "../../stores/session";
 import { SaveCheatDialog } from "./SaveCheatDialog";
 
-const TYPES: ValueType[] = ["i32", "f32", "i64", "f64", "i16", "u8", "u16", "u32", "u64", "i8"];
+const TYPES: ValueType[] = ["i32", "f32", "i64", "f64", "i16", "u8", "u16", "u32", "u64", "i8", "decimal"];
 const FILTERS: { id: ScanFilter["kind"]; label: string }[] = [
   { id: "exact", label: "Valor exacte" },
   { id: "decreased", label: "Ha disminuït" },
@@ -137,7 +137,7 @@ export function ScannerPage({ onSaved }: { onSaved: () => void }) {
               <input
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (summary ? next() : first())}
+                onKeyDown={(e) => e.key === "Enter" && !busy && (summary ? next() : first())}
                 inputMode="decimal"
                 placeholder="100"
                 className={`${field} w-36 font-mono`}
@@ -167,6 +167,7 @@ export function ScannerPage({ onSaved }: { onSaved: () => void }) {
           <p className="text-sm" aria-live="polite">
             <strong>{summary.count.toLocaleString("ca")}</strong> resultats · cerca {summary.scans} · {summary.elapsedMs} ms
             {summary.truncated && <span className="text-warn"> · n'hi havia més: refina la cerca</span>}
+            {summary.readFailures > 0 && <span className="text-warn"> · {summary.readFailures} candidats no llegibles</span>}
           </p>
         )}
         {msg && (

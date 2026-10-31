@@ -18,7 +18,11 @@ export function LogViewer() {
 
   const visible = useMemo(() => entries.filter((e) => ORDER.indexOf(e.level) >= ORDER.indexOf(min)), [entries, min]);
 
-  useEffect(() => bottom.current?.scrollIntoView({ block: "end" }), [visible.length]);
+  // Amb claus: Chromium recent fa que scrollIntoView retorni una Promise, i React la
+  // prendria per una funció de neteja
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: "end" });
+  }, [visible.length]);
 
   return (
     <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-line bg-panel">

@@ -2,6 +2,11 @@
 resolver = "2"
 members = ["src-tauri", "test-game"]
 
+# L'escàner recorre gigues de memòria: sense optimitzar seria 20-30 vegades més lent.
+# Només s'optimitza el nostre crate; la resta de dependències es compilen com sempre.
+[profile.dev.package.trainer-lab]
+opt-level = 3
+
 [profile.release]
 codegen-units = 1
 lto = true

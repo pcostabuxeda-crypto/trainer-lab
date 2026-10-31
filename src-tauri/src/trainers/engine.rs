@@ -5,6 +5,7 @@
 //! modificat la memòria, guardem els bytes originals per poder-los restaurar.
 
 use std::collections::BTreeMap;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -12,7 +13,7 @@ use ts_rs::TS;
 use super::model::{CheatDef, CheatKind, ToggleOff, TrainerDef};
 use crate::error::{AppError, AppResult};
 use crate::memory::freeze::Freezer;
-use crate::memory::locator;
+use crate::memory::{locator, pointer};
 use crate::memory::value::{ValueType, parse_hex_bytes};
 use crate::memory::{Memory, ModuleInfo, WriteMode};
 
@@ -77,9 +78,15 @@ pub struct CheatState {
     pub error: Option<String>,
 }
 
+/// Buscar pels noms IL2CPP costa uns segons: mentre el joc no és a punt, no a cada refresc.
+const IL2CPP_RETRY: Duration = Duration::from_secs(10);
+
 #[derive(Debug, Default)]
 struct Runtime {
-    start: Option<u64>,
+    /// Punt de partida i offsets de la cadena
+    start: Option<(u64, Vec<i64>)>,
+    /// Última vegada que s'ha intentat localitzar sense èxit
+    failed_at: Option<Instant>,
     active: bool,
     original: Option<Vec<u8>>,
     value: Option<f64>,
@@ -97,15 +104,20 @@ impl ActiveTrainer {
     /// Resol el punt de partida de cada truc. Els que fallen queden amb l'error i es
     /// tornen a provar quan l'usuari els fa servir.
     pub fn new(def: TrainerDef, version: VersionInfo, mem: &dyn Memory, modules: &[ModuleInfo]) -> Self {
+        // Els trucs amb la mateixa adreça només es busquen un cop
+        let mut known = BTreeMap::new();
         let runtime = def
             .cheats
             .iter()
             .map(|c| {
-                let rt = match locator::resolve_start(mem, modules, &c.target.address) {
-                    Ok(start) => Runtime { start: Some(start), ..Default::default() },
+                let chain = known
+                    .entry(format!("{:?}", c.target.address))
+                    .or_insert_with(|| locator::resolve_chain(mem, modules, &c.target.address).map_err(|e| e.to_string()));
+                let rt = match chain {
+                    Ok(chain) => Runtime { start: Some(chain.clone()), ..Default::default() },
                     Err(e) => {
                         tracing::warn!(cheat = %c.id, "no s'ha pogut localitzar: {e}");
-                        Runtime { error: Some(e.to_string()), ..Default::default() }
+                        Runtime { error: Some(e.clone()), failed_at: Some(Instant::now()), ..Default::default() }
                     }
                 };
                 (c.id.clone(), rt)
@@ -136,24 +148,20 @@ impl ActiveTrainer {
     /// Adreça actual del truc: punt de partida (guardat) + cadena de punters.
     fn address(&mut self, cheat: &CheatDef, mem: &dyn Memory, modules: &[ModuleInfo]) -> AppResult<u64> {
         let rt = self.runtime.entry(cheat.id.clone()).or_default();
-        let start = match rt.start {
-            Some(s) => s,
-            None => {
-                let s = locator::resolve_start(mem, modules, &cheat.target.address)?;
-                rt.start = Some(s);
-                s
-            }
-        };
-        let addr = locator::follow_pointers(mem, start, &cheat.target.address)?;
+        if rt.start.is_none() {
+            rt.failed_at = Some(Instant::now());
+            rt.start = Some(locator::resolve_chain(mem, modules, &cheat.target.address)?);
+        }
+        let Some((start, offsets)) = &rt.start else { unreachable!() };
+        let addr = pointer::resolve(mem, *start, offsets)?;
         rt.address = Some(addr);
         Ok(addr)
     }
 
     /// Congela el valor del truc seguint la seva cadena de punters.
     fn freeze(&self, c: &CheatDef, addr: u64, bytes: Vec<u8>, freezer: &Freezer) {
-        let offsets = c.target.address.pointers.iter().map(|o| o.0).collect();
-        match self.runtime.get(&c.id).and_then(|r| r.start) {
-            Some(start) => freezer.set_chain(&c.id, start, offsets, addr, bytes),
+        match self.runtime.get(&c.id).and_then(|r| r.start.as_ref()) {
+            Some((start, offsets)) => freezer.set_chain(&c.id, *start, offsets.clone(), addr, bytes),
             None => freezer.set(&c.id, addr, bytes),
         }
     }
@@ -301,11 +309,15 @@ impl ActiveTrainer {
             if c.target.value_type == ValueType::Bytes {
                 continue;
             }
+            let rt = self.runtime.entry(c.id.clone()).or_default();
+            if c.target.address.il2cpp.is_some() && rt.start.is_none() && rt.failed_at.is_some_and(|t| t.elapsed() < IL2CPP_RETRY) {
+                continue;
+            }
             let read = self.read_value(&c, mem, modules);
             let rt = self.runtime.entry(c.id.clone()).or_default();
             match read {
                 // L'error d'una acció anterior es manté; el d'una lectura fallida, no
-                Ok(_) if rt.error.as_deref().is_some_and(|e| e.starts_with("No s'ha pogut llegir") || e.starts_with("Punter nul")) => {
+                Ok(_) if rt.error.as_deref().is_some_and(|e| e.starts_with("No s'ha pogut llegir") || e.starts_with("Punter nul") || e.starts_with("Encara no")) => {
                     rt.error = None
                 }
                 Ok(_) => {}

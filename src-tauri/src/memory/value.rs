@@ -23,6 +23,8 @@ pub enum ValueType {
     F64,
     /// 1 byte: 0 = fals, qualsevol altre valor = cert
     Bool,
+    /// System.Decimal de .NET (16 bytes): jocs Unity/C# que guarden diners sense errors d'arrodoniment
+    Decimal,
     /// Seqüència de bytes en cru (només per a patches de codi)
     Bytes,
 }
@@ -35,6 +37,7 @@ impl ValueType {
             I16 | U16 => 2,
             I32 | U32 | F32 => 4,
             I64 | U64 | F64 => 8,
+            Decimal => 16,
             Bytes => 0,
         }
     }
@@ -78,6 +81,7 @@ impl ValueType {
                 (v as f32).to_le_bytes().to_vec()
             }
             F64 => v.to_le_bytes().to_vec(),
+            Decimal => encode_decimal(v)?,
             Bool => vec![u8::from(v != 0.0)],
             Bytes => unreachable!(),
         })
@@ -101,9 +105,48 @@ impl ValueType {
             F32 => f32::from_le_bytes(b.try_into().unwrap()) as f64,
             F64 => f64::from_le_bytes(b.try_into().unwrap()),
             Bool => f64::from(u8::from(b[0] != 0)),
+            Decimal => decode_decimal(b).ok_or_else(|| AppError::InvalidValue("no és un decimal vàlid".into()))?,
             Bytes => unreachable!(),
         })
     }
+}
+
+/// System.Decimal: `flags` (escala als bits 16-23, signe al 31; la resta, zero), `hi` u32 i
+/// `lo` u64. Valor = (hi·2⁶⁴ + lo) / 10^escala.
+pub fn decode_decimal(b: &[u8]) -> Option<f64> {
+    let flags = u32::from_le_bytes(b[0..4].try_into().ok()?);
+    let scale = (flags >> 16) & 0xFF;
+    if flags & 0x7F00_FFFF != 0 || scale > 28 {
+        return None;
+    }
+    let hi = u32::from_le_bytes(b[4..8].try_into().ok()?) as u128;
+    let lo = u64::from_le_bytes(b[8..16].try_into().ok()?) as u128;
+    let v = ((hi << 64) | lo) as f64 / 10f64.powi(scale as i32);
+    Some(if flags >> 31 == 1 { -v } else { v })
+}
+
+/// Amb els decimals mínims que representen `v` (999 → escala 0; 24,7 → 247 i escala 1).
+fn encode_decimal(v: f64) -> AppResult<Vec<u8>> {
+    if v.abs() >= 7.9e28 {
+        return Err(AppError::InvalidValue(format!("{v} no cap en un decimal")));
+    }
+    // `{}` dona la forma més curta que torna al mateix f64 (24,7 i no 24,69999…), mai amb exponent
+    let text = v.abs().to_string();
+    let (int, frac) = text.split_once('.').unwrap_or((&text, ""));
+    // Màxim 28 decimals i 96 bits de mantissa: si no hi cap, se'n treuen (com fa .NET)
+    let mut frac = frac[..frac.len().min(28)].to_string();
+    let mantissa = loop {
+        match format!("{int}{frac}").parse::<u128>() {
+            Ok(m) if m < 1 << 96 => break m,
+            _ if !frac.is_empty() => { frac.pop(); }
+            _ => return Err(AppError::InvalidValue(format!("{v} no cap en un decimal"))),
+        }
+    };
+    let flags = (frac.len() as u32) << 16 | if v < 0.0 { 1 << 31 } else { 0 };
+    let mut out = flags.to_le_bytes().to_vec();
+    out.extend(((mantissa >> 64) as u32).to_le_bytes());
+    out.extend((mantissa as u64).to_le_bytes());
+    Ok(out)
 }
 
 /// Bytes hex separats per espais, sense comodins: `"90 90 90"`.
@@ -129,7 +172,7 @@ mod tests {
 
     #[test]
     fn roundtrip_every_type() {
-        for (t, v) in [(I8, -5.0), (I16, -300.0), (I32, 100.0), (I64, -9e15), (U8, 255.0), (U16, 65535.0), (U32, 4e9), (U64, 1e15), (F32, 1.5), (F64, -2.25), (Bool, 1.0)] {
+        for (t, v) in [(I8, -5.0), (I16, -300.0), (I32, 100.0), (I64, -9e15), (U8, 255.0), (U16, 65535.0), (U32, 4e9), (U64, 1e15), (F32, 1.5), (F64, -2.25), (Decimal, -24.7), (Decimal, 999.0), (Bool, 1.0)] {
             let bytes = t.encode(v).unwrap();
             assert_eq!(bytes.len(), t.size(), "{t:?}");
             assert_eq!(t.decode(&bytes).unwrap(), v, "{t:?}");
@@ -146,6 +189,17 @@ mod tests {
         assert!(F32.encode(1e300).is_err());
         assert!(I32.decode(&[1, 2]).is_err());
         assert!(Bytes.encode(1.0).is_err());
+        assert!(Decimal.encode(1e30).is_err());
+        assert!(Decimal.decode(&[1; 16]).is_err(), "bits reservats");
+    }
+
+    #[test]
+    fn decimal_layout() {
+        // 24,70093609495393900000000000 tal com el desa Moon Sweepers (escala 27)
+        let b = [0, 0, 0x1b, 0, 0xac, 0x22, 0xd0, 0x4f, 0, 0x30, 0x1c, 0xcc, 0x5e, 0xe3, 0x27, 0xd4];
+        assert!((Decimal.decode(&b).unwrap() - 24.7009).abs() < 1e-4);
+        assert_eq!(Decimal.encode(999.0).unwrap(), [0, 0, 0, 0, 0, 0, 0, 0, 0xe7, 3, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(Decimal.encode(24.7).unwrap()[..4], [0, 0, 1, 0], "escala 1");
     }
 
     #[test]

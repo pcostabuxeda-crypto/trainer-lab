@@ -147,8 +147,8 @@ fn scanner_finds_health_and_its_static_pointer() {
     assert!(scan.count() > 1, "hi ha més d'un 100 a la memòria");
     // 2. Rep mal (85) i refina: «exacte 85» i després «no ha canviat»
     status_line(&mut game, &mut out, "d");
-    scan.next_scan(&p, ScanFilter::Exact { value: 85.0 });
-    scan.next_scan(&p, ScanFilter::Unchanged);
+    scan.next_scan(&p, ScanFilter::Exact { value: 85.0 }).unwrap();
+    scan.next_scan(&p, ScanFilter::Unchanged).unwrap();
     let hits = scan.page(&p, &modules, 0, 50);
     assert!(hits.iter().any(|h| h.address == format!("{health:#x}")), "la vida és entre els resultats: {hits:?}");
     let h = hits.iter().find(|h| h.address == format!("{health:#x}")).unwrap();
@@ -161,4 +161,97 @@ fn scanner_finds_health_and_its_static_pointer() {
         "{candidates:?}"
     );
     writeln!(game.0.stdin.as_mut().unwrap(), "q").unwrap();
+}
+
+#[test]
+fn automatic_scanner_finds_money_with_its_integer_type() {
+    use trainer_lab_lib::memory::scanner::{ScanFilter, first_scan_auto};
+    use trainer_lab_lib::memory::value::ValueType;
+
+    let (mut game, mut out) = start_game();
+    let p = Process::open(game.0.id()).unwrap();
+    let modules = p.modules().unwrap();
+    let money = locator::resolve(&p, &modules, &health_locator("0x8")).unwrap();
+    let mut scan = first_scan_auto(&p, 500.0);
+    status_line(&mut game, &mut out, "b");
+    scan.next_scan(&p, ScanFilter::Exact { value: 380.0 }).unwrap();
+    let hits = scan.page(&p, &modules, 0, scan.count());
+    assert!(hits.iter().any(|h| h.address == format!("{money:#x}")
+        && h.value_type == ValueType::I64 && h.value == Some(380.0)));
+    writeln!(game.0.stdin.as_mut().unwrap(), "q").unwrap();
+}
+
+/// Mesura de velocitat de la primera cerca contra un procés real (només lectura):
+/// `BENCH_PID=1234 cargo test -p trainer-lab --test test_game scan_benchmark -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn scan_benchmark() {
+    use trainer_lab_lib::memory::scanner::first_scan;
+    use trainer_lab_lib::memory::value::ValueType;
+    let pid: u32 = std::env::var("BENCH_PID").expect("cal BENCH_PID").parse().unwrap();
+    let p = Process::open(pid).unwrap();
+    // BENCH_VALUE (opcional): valor a buscar com a f32/f64 i, multiplicat per 100, com a i32/i64
+    let v: f64 = std::env::var("BENCH_VALUE").ok().and_then(|x| x.parse().ok()).unwrap_or(6.71);
+    let cents = (v * 100.0).round();
+    for (ty, v) in [(ValueType::F32, v), (ValueType::F64, v), (ValueType::I32, cents), (ValueType::I64, cents)] {
+        let t = std::time::Instant::now();
+        let s = first_scan(&p, ty, v);
+        println!("{ty:?} {v}: {} resultats en {:?}", s.count(), t.elapsed());
+    }
+}
+
+/// Segueix un camí IL2CPP en un procés real (només lectura) i llegeix el decimal del final:
+/// `BENCH_PID=1 BENCH_ROOT=Classe.Instance BENCH_FIELDS=Classe.a,Altra.b cargo test ... il2cpp_path -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn il2cpp_path() {
+    use trainer_lab_lib::memory::il2cpp::{self, Il2cppPath};
+    use trainer_lab_lib::memory::pointer;
+    use trainer_lab_lib::memory::value::ValueType;
+    let env = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("cal {k}"));
+    let p = Process::open(env("BENCH_PID").parse().unwrap()).unwrap();
+    let path = Il2cppPath { root: env("BENCH_ROOT"), fields: env("BENCH_FIELDS").split(',').map(String::from).collect() };
+    let t = std::time::Instant::now();
+    let (start, offsets) = il2cpp::resolve(&p, &path).unwrap();
+    println!("{start:#x} {offsets:x?} en {:?}", t.elapsed());
+    let address = pointer::resolve(&p, start, &offsets).unwrap();
+    let mut b = [0u8; 16];
+    p.read_bytes(address, &mut b).unwrap();
+    println!("{address:#x} = {}", ValueType::Decimal.decode(&b).unwrap());
+}
+
+/// Llista (només lectura) els decimals d'un procés que valen entre BENCH_MIN i BENCH_MAX:
+/// `BENCH_PID=1 BENCH_MIN=47.705 BENCH_MAX=47.71 cargo test ... scan_dump -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn scan_dump() {
+    use trainer_lab_lib::memory::scanner::first_scan;
+    use trainer_lab_lib::memory::value::ValueType;
+    let env = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("cal {k}"));
+    let p = Process::open(env("BENCH_PID").parse().unwrap()).unwrap();
+    let (min, max): (f64, f64) = (env("BENCH_MIN").parse().unwrap(), env("BENCH_MAX").parse().unwrap());
+    for ty in [ValueType::F32, ValueType::F64] {
+        let s = first_scan(&p, ty, (min + max) / 2.0);
+        for h in s.page(&p, &p.modules().unwrap(), 0, s.count()) {
+            if h.value.is_some_and(|v| v >= min && v < max) {
+                println!("{ty:?} {} {:?} {:?}", h.address, h.value, h.module_offset);
+            }
+        }
+    }
+}
+
+/// Llista (només lectura) totes les adreces d'un tipus amb un valor exacte:
+/// `BENCH_PID=1 BENCH_TYPE=i64 BENCH_VALUE=47707 cargo test ... scan_list -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn scan_list() {
+    use trainer_lab_lib::memory::scanner::first_scan;
+    use trainer_lab_lib::memory::value::ValueType;
+    let env = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("cal {k}"));
+    let p = Process::open(env("BENCH_PID").parse().unwrap()).unwrap();
+    let ty: ValueType = serde_json::from_str(&format!("\"{}\"", env("BENCH_TYPE"))).unwrap();
+    let s = first_scan(&p, ty, env("BENCH_VALUE").parse().unwrap());
+    for h in s.page(&p, &p.modules().unwrap(), 0, 50) {
+        println!("{ty:?} {} {:?} {:?}", h.address, h.value, h.module_offset);
+    }
 }

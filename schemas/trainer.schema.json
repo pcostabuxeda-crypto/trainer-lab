@@ -289,6 +289,28 @@
         "sha256"
       ]
     },
+    "Il2cppPath": {
+      "description": "Camí per noms, tots en format `Classe.camp` (sense espai de noms).",
+      "type": "object",
+      "properties": {
+        "fields": {
+          "description": "Camps a seguir a partir de l'objecte, l'últim és el valor",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "root": {
+          "description": "Camp estàtic on comença el camí: el singleton del joc",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "fields"
+      ]
+    },
     "Locator": {
       "type": "object",
       "properties": {
@@ -296,6 +318,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/AobLocator"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "il2cpp": {
+          "description": "Camí per noms en jocs Unity IL2CPP: sobreviu a les actualitzacions del joc",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Il2cppPath"
             },
             {
               "type": "null"
@@ -514,6 +547,11 @@
           "description": "1 byte: 0 = fals, qualsevol altre valor = cert",
           "type": "string",
           "const": "bool"
+        },
+        {
+          "description": "System.Decimal de .NET (16 bytes): jocs Unity/C# que guarden diners sense errors d'arrodoniment",
+          "type": "string",
+          "const": "decimal"
         },
         {
           "description": "Seqüència de bytes en cru (només per a patches de codi)",

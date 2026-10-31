@@ -124,11 +124,30 @@ impl SessionState {
             .map(|rd| rd.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
             .unwrap_or_default();
         warnings.extend(anticheat::check_install_dir(&entries));
-        if !warnings.is_empty() && !acknowledge_warnings {
-            return Err(AppError::AntiCheatWarning(format!(
-                "s'ha detectat {}, però no dins d'aquest joc. Continua només si el joc és single-player i el fas servir offline.",
-                warnings.join(", ")
-            )));
+        // L'usuari pot haver acceptat ja aquests avisos per a aquest joc (Configuració ho pot oblidar)
+        let settings = app.state::<SettingsStore>();
+        let game_key = process.path.to_lowercase();
+        let remembered = settings.get().acknowledged_warnings.get(&game_key).cloned().unwrap_or_default();
+        if anticheat::needs_confirmation(&warnings, &remembered) {
+            if !acknowledge_warnings {
+                return Err(AppError::AntiCheatWarning(format!(
+                    "s'ha detectat {}, però no dins d'aquest joc. Continua només si el joc és single-player i el fas servir offline.",
+                    warnings.join(", ")
+                )));
+            }
+            let mut s = settings.get();
+            let entry = s.acknowledged_warnings.entry(game_key).or_default();
+            for w in &warnings {
+                if !entry.contains(w) {
+                    entry.push(w.clone());
+                }
+            }
+            if let Err(e) = settings.save(s) {
+                tracing::warn!("no s'ha pogut recordar l'avís acceptat: {e}");
+            }
+            tracing::info!(game = %process.name, avisos = %warnings.join(", "), "avís d'anti-cheat acceptat i recordat");
+        } else if !warnings.is_empty() {
+            tracing::info!(game = %process.name, "avís d'anti-cheat ja acceptat per a aquest joc");
         }
 
         // 4. Versió i trucs

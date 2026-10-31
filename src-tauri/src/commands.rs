@@ -44,14 +44,17 @@ pub async fn attach(
     state.attach(&app, pid, acknowledge_warnings.unwrap_or(false))
 }
 
+// Les comandes que toquen la sessió són `async`: Tauri executa les síncrones al fil de la
+// finestra, i si la sessió està ocupada la finestra deixaria de respondre.
+
 #[tauri::command]
-pub fn detach(app: AppHandle, state: State<'_, SessionState>) -> bool {
-    state.detach(&app, "Desadjuntat per l'usuari", None, true)
+pub async fn detach(app: AppHandle, state: State<'_, SessionState>) -> AppResult<bool> {
+    Ok(state.detach(&app, "Desadjuntat per l'usuari", None, true))
 }
 
 #[tauri::command]
-pub fn session_info(state: State<'_, SessionState>) -> Option<SessionInfo> {
-    state.info()
+pub async fn session_info(state: State<'_, SessionState>) -> AppResult<Option<SessionInfo>> {
+    Ok(state.info())
 }
 
 // --- Trainers ---
@@ -74,6 +77,17 @@ pub fn reload_trainers(store: State<'_, TrainerStore>, games: State<'_, GameStor
 #[tauri::command]
 pub async fn list_games(app: AppHandle, games: State<'_, GameStore>, refresh: Option<bool>) -> AppResult<Vec<GameEntry>> {
     Ok(games.installed(&app, refresh.unwrap_or(false)))
+}
+
+/// Obre un joc de la Biblioteca (només jocs que l'app ha trobat, mai una ruta qualsevol).
+#[tauri::command]
+pub async fn launch_game(app: AppHandle, games: State<'_, GameStore>, game_id: String) -> AppResult<()> {
+    let game = games
+        .installed(&app, false)
+        .into_iter()
+        .find(|g| g.id == game_id)
+        .ok_or_else(|| AppError::InvalidValue(format!("no conec el joc «{game_id}»")))?;
+    crate::games::launch(&game)
 }
 
 #[tauri::command]
@@ -191,7 +205,7 @@ pub async fn set_cheat(state: State<'_, SessionState>, cheat_id: String, input: 
 /// `id:decrease` als sliders. `accelerator` buit desactiva la drecera; `null` torna a la
 /// de la definició.
 #[tauri::command]
-pub fn set_hotkey(
+pub async fn set_hotkey(
     app: AppHandle,
     state: State<'_, SessionState>,
     settings: State<'_, SettingsStore>,
@@ -235,7 +249,7 @@ pub fn get_settings(settings: State<'_, SettingsStore>) -> Settings {
 }
 
 #[tauri::command]
-pub fn save_settings(state: State<'_, SessionState>, settings: State<'_, SettingsStore>, value: Settings) -> AppResult<()> {
+pub async fn save_settings(state: State<'_, SessionState>, settings: State<'_, SettingsStore>, value: Settings) -> AppResult<()> {
     let interval = value.freeze_interval_ms;
     settings.save(value)?;
     let _ = state.with(|s| {
@@ -248,36 +262,53 @@ pub fn save_settings(state: State<'_, SessionState>, settings: State<'_, Setting
 // --- Escàner (Fase 5) ---
 
 fn summary(s: &scanner::ScanState, started: std::time::Instant) -> ScanSummary {
-    ScanSummary { count: s.count(), truncated: s.truncated, scans: s.scans, elapsed_ms: started.elapsed().as_millis() as u64 }
+    ScanSummary { count: s.count(), truncated: s.truncated, scans: s.scans, elapsed_ms: started.elapsed().as_millis() as u64, read_failures: s.read_failures }
 }
 
 #[tauri::command]
-pub async fn scan_first(state: State<'_, SessionState>, value_type: ValueType, value: f64) -> AppResult<ScanSummary> {
+pub async fn scan_first(state: State<'_, SessionState>, value_type: ValueType, value: f64, automatic: Option<bool>) -> AppResult<ScanSummary> {
     if !value_type.is_numeric() {
         return Err(AppError::InvalidValue("l'escàner només busca valors numèrics".into()));
     }
     value_type.encode(value)?; // valida el rang abans d'escanejar
+    // La cerca pot trigar: es fa sense tenir la sessió bloquejada, perquè la resta de l'app
+    // (trucs, dreceres, congelació) continuï funcionant mentrestant
+    let process = state.with(|s| Ok(s.process.clone()))?;
+    let started = std::time::Instant::now();
+    let automatic = automatic.unwrap_or(false);
+    let scan = if automatic { scanner::first_scan_auto(process.as_ref(), value) }
+        else { scanner::first_scan(process.as_ref(), value_type, value) };
+    let sum = summary(&scan, started);
+    tracing::info!(count = sum.count, ms = sum.elapsed_ms, value, automatic, ty = ?value_type, "primera cerca");
+    store_scan(&state, process.pid, scan)?;
+    Ok(sum)
+}
+
+/// Desa els resultats a la sessió, si encara és la del mateix joc.
+fn store_scan(state: &SessionState, pid: u32, scan: scanner::ScanState) -> AppResult<()> {
     state.with(|s| {
-        let started = std::time::Instant::now();
-        let scan = scanner::first_scan(s.process.as_ref(), value_type, value);
-        let sum = summary(&scan, started);
-        tracing::info!(count = sum.count, ms = sum.elapsed_ms, value, ty = ?value_type, "primera cerca");
+        if s.process.pid != pid {
+            return Err(AppError::NotAttached);
+        }
         *s.scan.lock().unwrap_or_else(|e| e.into_inner()) = Some(scan);
-        Ok(sum)
+        Ok(())
     })
 }
 
 #[tauri::command]
 pub async fn scan_next(state: State<'_, SessionState>, filter: ScanFilter) -> AppResult<ScanSummary> {
-    state.with(|s| {
-        let mut guard = s.scan.lock().unwrap_or_else(|e| e.into_inner());
-        let scan = guard.as_mut().ok_or_else(|| AppError::InvalidValue("primer fes una primera cerca".into()))?;
-        let started = std::time::Instant::now();
-        scan.next_scan(s.process.as_ref(), filter);
-        let sum = summary(scan, started);
-        tracing::info!(count = sum.count, ms = sum.elapsed_ms, filter = ?filter, "cerca següent");
-        Ok(sum)
-    })
+    // Agafem els resultats i el procés, i deixem anar la sessió mentre es rellegeixen
+    let (process, mut scan) = state.with(|s| {
+        let scan = s.scan.lock().unwrap_or_else(|e| e.into_inner()).take();
+        Ok((s.process.clone(), scan.ok_or_else(|| AppError::InvalidValue("primer fes una primera cerca".into()))?))
+    })?;
+    let started = std::time::Instant::now();
+    let result = scan.next_scan(process.as_ref(), filter);
+    let sum = summary(&scan, started);
+    tracing::info!(count = sum.count, ms = sum.elapsed_ms, read_failures = sum.read_failures, filter = ?filter, "cerca següent");
+    store_scan(&state, process.pid, scan)?;
+    result?;
+    Ok(sum)
 }
 
 #[tauri::command]
@@ -289,7 +320,7 @@ pub async fn scan_results(state: State<'_, SessionState>, offset: usize, limit: 
 }
 
 #[tauri::command]
-pub fn scan_reset(state: State<'_, SessionState>) -> AppResult<()> {
+pub async fn scan_reset(state: State<'_, SessionState>) -> AppResult<()> {
     state.with(|s| {
         *s.scan.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(())
@@ -317,12 +348,28 @@ pub async fn scan_write(state: State<'_, SessionState>, address: String, value_t
     })
 }
 
+/// Truc temporal: congela una adreça només fins que es tanqui el joc (no es desa enlloc).
+/// Serveix quan una troballa és dinàmica i no hi ha cap punter estàtic.
+#[tauri::command]
+pub async fn freeze_address(state: State<'_, SessionState>, address: String, value_type: ValueType, value: f64) -> AppResult<String> {
+    let address = parse_address(&address)?;
+    let bytes = value_type.encode(value)?;
+    state.with(|s| {
+        s.process.write_bytes(address, &bytes, WriteMode::Data)?;
+        let key = format!("temp:{address:#x}:{value_type:?}");
+        s.freezer.set(&key, address, bytes);
+        tracing::info!(key, value, "truc temporal");
+        Ok(key)
+    })
+}
+
 /// Busca variables globals que apuntin a l'adreça (o just abans): candidats per a un truc
 /// que continuï funcionant després de reiniciar el joc.
 #[tauri::command]
 pub async fn find_pointers(state: State<'_, SessionState>, address: String) -> AppResult<Vec<PointerCandidate>> {
     let target = parse_address(&address)?;
-    state.with(|s| Ok(scanner::find_static_pointers(s.process.as_ref(), &s.modules, target, 0x1000, 20)))
+    let (process, modules) = state.with(|s| Ok((s.process.clone(), s.modules.clone())))?;
+    Ok(scanner::find_static_pointers(process.as_ref(), &modules, target, 0x1000, 20))
 }
 
 /// Afegeix un truc a la definició del joc adjuntat (en crea una si cal) i la recarrega.
@@ -393,11 +440,11 @@ pub async fn debug_write(
 }
 
 #[tauri::command]
-pub fn list_frozen(state: State<'_, SessionState>) -> AppResult<Vec<String>> {
+pub async fn list_frozen(state: State<'_, SessionState>) -> AppResult<Vec<String>> {
     state.with(|s| Ok(s.freezer.keys()))
 }
 
 #[tauri::command]
-pub fn unfreeze(state: State<'_, SessionState>, key: String) -> AppResult<bool> {
+pub async fn unfreeze(state: State<'_, SessionState>, key: String) -> AppResult<bool> {
     state.with(|s| Ok(s.freezer.remove(&key)))
 }

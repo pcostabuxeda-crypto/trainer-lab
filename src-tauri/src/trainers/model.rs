@@ -262,8 +262,11 @@ pub fn validate(def: &TrainerDef) -> Result<(), Vec<String>> {
 
         // Adreça
         let a = &c.target.address;
-        if a.offset.is_some() == a.aob.is_some() {
-            err(p("target.address"), "cal exactament un de `offset` o `aob`");
+        if [a.offset.is_some(), a.aob.is_some(), a.il2cpp.is_some()].iter().filter(|x| **x).count() != 1 {
+            err(p("target.address"), "cal exactament un de `offset`, `aob` o `il2cpp`");
+        }
+        if let Some(Err(e)) = a.il2cpp.as_ref().map(|path| path.parts().map(|_| ())) {
+            err(p("target.address.il2cpp"), &e.to_string());
         }
         if let Some(aob) = &a.aob
             && let Err(e) = aob.pattern.parse::<Pattern>()

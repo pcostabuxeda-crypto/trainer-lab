@@ -22,7 +22,7 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
     Process32NextW, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Memory::{
-    MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, VirtualProtectEx,
+    MEM_COMMIT, MEM_MAPPED, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, VirtualProtectEx,
     VirtualQueryEx,
 };
 use windows::Win32::System::SystemInformation::{
@@ -235,6 +235,7 @@ impl Memory for Process {
             writable,
             executable,
             guard,
+            mapped: mbi.Type == MEM_MAPPED,
         })
     }
 }

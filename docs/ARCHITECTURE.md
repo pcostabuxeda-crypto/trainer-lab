@@ -155,6 +155,28 @@ Al JSON: `"rip": { "dispOffset": 3, "instrLength": 7 }`. Al codi: [`locator::res
 AOB → `ANCHOR.player` (magic + 8) → llegir el punter → `+0x0` = vida. Funciona encara que
 recompilis el joc i canviïn totes les adreces.
 
+### Camins per noms en jocs Unity IL2CPP
+
+Un AOB i els offsets es trenquen quan el joc s'actualitza. En un joc IL2CPP els noms de
+classes i camps es conserven, i [`il2cpp::resolve`](../src-tauri/src/memory/il2cpp.rs) els
+llegeix des de fora, sense injectar res:
+
+```json
+{ "il2cpp": {
+    "root": "MoonCrewSession.<Instance>k__BackingField",
+    "fields": ["MoonCrewSession.bound", "MoonWorld.wallets", "TeamWallet.Balance"] } }
+```
+
+1. Busca els noms a `global-metadata.dat`, que el joc té mapejat a memòria.
+2. Busca al heap qui hi apunta: són els `FieldInfo` (nom, tipus, classe, offset). Dues classes
+   poden tenir un camp amb el mateix nom; per això s'hi compara la classe.
+3. L'arrel ha de ser un singleton: el punter és a `static_fields + offset`, i es reconeix
+   perquè l'objecte és de la mateixa classe. `static_fields` canvia segons la versió d'IL2CPP.
+
+El resultat és el punt de partida i els offsets d'una cadena normal, que es guarden (la cerca
+triga uns 6 s). Un `FieldInfo` només existeix quan la classe s'ha carregat: al menú del joc
+pot fallar, i llavors es torna a provar cada 10 s.
+
 ---
 
 ## 5. Congelar valors
@@ -184,7 +206,7 @@ reescriure'l contínuament ([`Freezer`](../src-tauri/src/memory/freeze.rs)):
 | Situació | Resultat |
 |---|---|
 | Mòdul d'anti-cheat **dins del joc** (EasyAntiCheat, BEClient…) | **Bloquejat** |
-| Anti-cheat en marxa **al sistema** (Vanguard, BEService…) | **Avís**: cal confirmar |
+| Anti-cheat en marxa **al sistema** (Vanguard, BEService…) | **Avís**: cal confirmar (es recorda per joc) |
 
 ---
 
@@ -273,14 +295,29 @@ ajudants (crash handlers, desinstal·ladors…) s'ignoren. Si la llista canvia, 
 
 ## 12. Escàner de memòria ([`memory/scanner.rs`](../src-tauri/src/memory/scanner.rs))
 
-**Primera cerca.** Recorre totes les regions **escrivibles** del joc (les dades; el codi i les
-constants no canvien) en blocs de 4 MB i compara cada posició **alineada** a la mida del tipus
+**Primera cerca.** Recorre les regions **escrivibles** privades o d'imatge del joc (les dades;
+el codi i les constants no canvien, i la memòria *mapejada* —fitxers, memòria compartida amb la
+GPU— se salta com fa Cheat Engine per defecte) en blocs de 4 MB i compara cada posició **alineada** a la mida del tipus
 (4 bytes per a `i32`/`f32`). Els compiladors alineen les variables, així que n'hi ha prou i és
-molt més ràpid. Es guarden com a molt 2 milions de resultats (adreça + valor, 16 bytes cadascun).
+molt més ràpid. Els enters es comparen com a bytes (una comparació de memòria) i els decimals es
+converteixen directament. Es guarden com a molt 2 milions de resultats.
+
+L'assistent fa una cerca automàtica de `i32`, `i64`, `f32` i `f64` (només els tipus que
+poden representar el valor). Comparteix la lectura de cada bloc entre els tipus i desa
+el tipus de cada candidat. Les cerques següents, la prova i el truc desat conserven
+aquest tipus. El mode avançat continua cercant només el tipus seleccionat. Els blocs
+se solapen 4 bytes per no perdre valors de 8 bytes alineats a 4 que travessen el límit.
+
+**Sense bloquejar l'app.** Una cerca en un joc gran pot trigar uns segons. Es fa sense tenir
+la sessió bloquejada: la congelació, les dreceres i la UI continuen funcionant. A més, totes les
+comandes que toquen la sessió són `async`, perquè Tauri executa les síncrones al fil de la
+finestra i, si haguessin d'esperar, Windows la marcaria com a «No respon».
 
 **Cerques següents.** Només es rellegeixen les adreces que queden. Les que són a prop
 (menys de 64 KB) es llegeixen juntes en un sol `ReadProcessMemory`, que és el que costa. Si un
-bloc creua una zona no llegible, es llegeixen una per una.
+bloc creua una zona no llegible, es llegeixen una per una. Es compten i es registren les
+lectures fallides; si fallen totes, es conserva la cerca anterior i es permet reintentar.
+La UI diferencia aquest error d'una cerca sense coincidències i mostra els resultats truncats.
 
 | Condició | Es queda si… |
 |---|---|

@@ -10,6 +10,7 @@ pub mod aob;
 #[cfg(test)]
 pub mod fake;
 pub mod freeze;
+pub mod il2cpp;
 pub mod locator;
 pub mod pointer;
 pub mod process;
@@ -31,6 +32,8 @@ pub struct Region {
     pub executable: bool,
     /// `PAGE_GUARD`: tocar-la llança una excepció dins del joc. Mai hi escrivim.
     pub guard: bool,
+    /// `MEM_MAPPED`: fitxers o memòria compartida (p. ex. amb la GPU). L'escàner la salta.
+    pub mapped: bool,
 }
 
 impl Region {
@@ -118,7 +121,7 @@ mod tests {
     use super::*;
 
     fn rw() -> Region {
-        Region { base: 0x10000, size: 0x1000, committed: true, readable: true, writable: true, executable: false, guard: false }
+        Region { base: 0x10000, size: 0x1000, committed: true, readable: true, writable: true, executable: false, guard: false, mapped: false }
     }
 
     #[test]
