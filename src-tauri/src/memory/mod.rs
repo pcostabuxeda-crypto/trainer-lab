@@ -10,6 +10,7 @@ pub mod aob;
 #[cfg(test)]
 pub mod fake;
 pub mod freeze;
+pub mod il2cpp;
 pub mod locator;
 pub mod pointer;
 pub mod process;

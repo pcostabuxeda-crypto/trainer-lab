@@ -327,3 +327,12 @@ La política de l'usuari permet tocar-ho jugant sol.
   i «+1.000 $» (F5). Punt de partida per patró AOB del getter `MoonCrewSession.get_Instance`
   (rip-relative): si una actualització canvia el codi, el truc falla en lloc d'escriure a cegues.
 - Provat al joc des de l'app: +1.000 → HUD 1.02K; Aplica 9999 → 9.99K. Diners restaurats.
+
+## 31 oct 2026 — Camins per noms IL2CPP
+
+L'actualització de Moon Sweepers del 28 d'octubre va trencar el truc de diners: el patró AOB
+ja no hi era i `MoonWorld.wallets` havia passat de +0x538 a +0x5B8. Com que els noms no
+canvien, el localitzador `il2cpp` els llegeix directament de les estructures de l'IL2CPP
+(vegeu docs/ARCHITECTURE.md §4). Si un nom desapareix, el truc dona error en lloc d'escriure.
+
+Provat contra el joc amb el test ignorat `il2cpp_path`: 6 s, offsets iguals als trobats a mà.

@@ -155,6 +155,28 @@ Al JSON: `"rip": { "dispOffset": 3, "instrLength": 7 }`. Al codi: [`locator::res
 AOB → `ANCHOR.player` (magic + 8) → llegir el punter → `+0x0` = vida. Funciona encara que
 recompilis el joc i canviïn totes les adreces.
 
+### Camins per noms en jocs Unity IL2CPP
+
+Un AOB i els offsets es trenquen quan el joc s'actualitza. En un joc IL2CPP els noms de
+classes i camps es conserven, i [`il2cpp::resolve`](../src-tauri/src/memory/il2cpp.rs) els
+llegeix des de fora, sense injectar res:
+
+```json
+{ "il2cpp": {
+    "root": "MoonCrewSession.<Instance>k__BackingField",
+    "fields": ["MoonCrewSession.bound", "MoonWorld.wallets", "TeamWallet.Balance"] } }
+```
+
+1. Busca els noms a `global-metadata.dat`, que el joc té mapejat a memòria.
+2. Busca al heap qui hi apunta: són els `FieldInfo` (nom, tipus, classe, offset). Dues classes
+   poden tenir un camp amb el mateix nom; per això s'hi compara la classe.
+3. L'arrel ha de ser un singleton: el punter és a `static_fields + offset`, i es reconeix
+   perquè l'objecte és de la mateixa classe. `static_fields` canvia segons la versió d'IL2CPP.
+
+El resultat és el punt de partida i els offsets d'una cadena normal, que es guarden (la cerca
+triga uns 6 s). Un `FieldInfo` només existeix quan la classe s'ha carregat: al menú del joc
+pot fallar, i llavors es torna a provar cada 10 s.
+
 ---
 
 ## 5. Congelar valors

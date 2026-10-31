@@ -8,6 +8,7 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ts_rs::TS;
 
+use super::il2cpp::{self, Il2cppPath};
 use super::{Memory, ModuleInfo, aob, pointer};
 use crate::error::{AppError, AppResult};
 
@@ -106,6 +107,10 @@ pub struct Locator {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub aob: Option<AobLocator>,
+    /// Camí per noms en jocs Unity IL2CPP: sobreviu a les actualitzacions del joc
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub il2cpp: Option<Il2cppPath>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pointers: Vec<Offset>,
 }
@@ -122,13 +127,26 @@ pub fn find_module<'a>(modules: &'a [ModuleInfo], name: Option<&str>) -> AppResu
 }
 
 pub fn resolve(mem: &dyn Memory, modules: &[ModuleInfo], loc: &Locator) -> AppResult<u64> {
-    let start = resolve_start(mem, modules, loc)?;
-    follow_pointers(mem, start, loc)
+    let (start, offsets) = resolve_chain(mem, modules, loc)?;
+    pointer::resolve(mem, start, &offsets)
 }
 
-/// Només el punt de partida (mòdul + offset o AOB). És la part cara (l'escaneig AOB) i no
-/// canvia mentre el joc està obert, així que es pot guardar.
-pub fn resolve_start(mem: &dyn Memory, modules: &[ModuleInfo], loc: &Locator) -> AppResult<u64> {
+/// Punt de partida i offsets de la cadena. És la part cara (l'escaneig) i no canvia mentre el
+/// joc està obert, així que es pot guardar; la cadena es torna a recórrer a cada ús, perquè
+/// els punters canvien quan el joc carrega una partida nova.
+pub fn resolve_chain(mem: &dyn Memory, modules: &[ModuleInfo], loc: &Locator) -> AppResult<(u64, Vec<i64>)> {
+    let pointers = loc.pointers.iter().map(|o| o.0);
+    match &loc.il2cpp {
+        Some(path) => {
+            let (start, fields) = il2cpp::resolve(mem, path)?;
+            Ok((start, fields.into_iter().chain(pointers).collect()))
+        }
+        None => Ok((resolve_start(mem, modules, loc)?, pointers.collect())),
+    }
+}
+
+/// Només el punt de partida (mòdul + offset o AOB).
+fn resolve_start(mem: &dyn Memory, modules: &[ModuleInfo], loc: &Locator) -> AppResult<u64> {
     let module = find_module(modules, loc.module.as_deref())?;
     Ok(match (&loc.offset, &loc.aob) {
         (Some(off), None) => module.base.wrapping_add_signed(off.0),
@@ -151,13 +169,6 @@ pub fn resolve_start(mem: &dyn Memory, modules: &[ModuleInfo], loc: &Locator) ->
         }
         _ => return Err(AppError::InvalidValue("l'adreça necessita exactament un de: `offset` o `aob`".into())),
     })
-}
-
-/// La cadena de punters a partir de `start`. Es torna a recórrer a cada ús, perquè els
-/// punters canvien quan el joc carrega una partida nova.
-pub fn follow_pointers(mem: &dyn Memory, start: u64, loc: &Locator) -> AppResult<u64> {
-    let offsets: Vec<i64> = loc.pointers.iter().map(|o| o.0).collect();
-    pointer::resolve(mem, start, &offsets)
 }
 
 #[cfg(test)]

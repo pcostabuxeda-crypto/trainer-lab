@@ -200,6 +200,26 @@ fn scan_benchmark() {
     }
 }
 
+/// Segueix un camí IL2CPP en un procés real (només lectura) i llegeix el decimal del final:
+/// `BENCH_PID=1 BENCH_ROOT=Classe.Instance BENCH_FIELDS=Classe.a,Altra.b cargo test ... il2cpp_path -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn il2cpp_path() {
+    use trainer_lab_lib::memory::il2cpp::{self, Il2cppPath};
+    use trainer_lab_lib::memory::pointer;
+    use trainer_lab_lib::memory::value::ValueType;
+    let env = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("cal {k}"));
+    let p = Process::open(env("BENCH_PID").parse().unwrap()).unwrap();
+    let path = Il2cppPath { root: env("BENCH_ROOT"), fields: env("BENCH_FIELDS").split(',').map(String::from).collect() };
+    let t = std::time::Instant::now();
+    let (start, offsets) = il2cpp::resolve(&p, &path).unwrap();
+    println!("{start:#x} {offsets:x?} en {:?}", t.elapsed());
+    let address = pointer::resolve(&p, start, &offsets).unwrap();
+    let mut b = [0u8; 16];
+    p.read_bytes(address, &mut b).unwrap();
+    println!("{address:#x} = {}", ValueType::Decimal.decode(&b).unwrap());
+}
+
 /// Llista (només lectura) els decimals d'un procés que valen entre BENCH_MIN i BENCH_MAX:
 /// `BENCH_PID=1 BENCH_MIN=47.705 BENCH_MAX=47.71 cargo test ... scan_dump -- --ignored --nocapture`
 #[test]

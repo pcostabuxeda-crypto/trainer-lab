@@ -17,13 +17,13 @@ use super::value::ValueType;
 use super::{Memory, ModuleInfo, Region};
 
 /// Bytes que es llegeixen de cop a la primera cerca.
-const CHUNK: usize = 4 << 20;
+pub(super) const CHUNK: usize = 4 << 20;
 /// Bloc màxim per rellegir resultats propers a les cerques següents.
 const BLOCK: u64 = 64 << 10;
 /// Límit total de candidats, compartit entre tots els tipus.
 pub const MAX_HITS: usize = 2_000_000;
 /// Espai d'adreces d'usuari a Windows x64.
-const USER_END: u64 = 0x7FFF_FFFF_0000;
+pub(super) const USER_END: u64 = 0x7FFF_FFFF_0000;
 
 #[derive(Debug, Clone, Copy, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -114,7 +114,7 @@ fn keep(ty: ValueType, scale: f64, filter: ScanFilter, now: f64, before: f64) ->
 /// Memòria on un joc guarda les seves dades: privada (heap) o de les seves imatges (globals).
 /// Les regions mapejades (fitxers, memòria compartida amb la GPU) es salten, com fa Cheat Engine
 /// per defecte: hi ha molts megabytes i gairebé mai hi ha valors del joc.
-fn scannable(r: &Region) -> bool {
+pub(super) fn scannable(r: &Region) -> bool {
     r.committed && r.readable && r.writable && !r.guard && !r.mapped
 }
 
